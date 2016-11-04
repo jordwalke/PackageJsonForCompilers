@@ -260,6 +260,7 @@ friendly / caching friendly.
 |Environment Var | Meaning                                                                    | Equivalent To             |
 |----------------|----------------------------------------------------------------------------|---------------------------|
 | `FINDLIB_CONF` | Path to precomputed findlib.conf file, exposing `cur`'s dependencies       |                           |
+| `version`      | Version of the current dependencyEnv package                               | Opam's `opam-version`     |
 | `sandbox`      | Path to top level package being installed - the thing you git cloned       |                           |
 | `_install_tree`| Path to install tree, which contains all prefixes, for all packages        |                           |
 | `_build_tree`  | Path to build tree, which contains all build directories, for all packages |                           |
