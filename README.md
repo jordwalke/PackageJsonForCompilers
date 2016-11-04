@@ -33,7 +33,10 @@ In general, we have a top level package, with dependencies inside of `node_modul
      └── node_modules/
          └── ...
 
-Expanding out a bit, we see that inside of the `_install`, each package resides in its mirrored location. Each package has its *own* `findlib` root, with its own `bin`/`lib` etc. This is very important as it allows multiple versions of a single package to exist simultaneously.
+Expanding out a bit, we see that inside of the `_install`, each package resides
+in its mirrored location. Each package has its *own* `findlib` root, with its
+own `bin`/`lib` etc. This is very important as it allows multiple versions of a
+single package to exist simultaneously.
 
 
     Project Directory
@@ -155,6 +158,67 @@ Expanding out even further:
                             some kind of .links file.                   
 
 
+## BuildTimeOnlyDependencies
+
+As discussed in [this
+issue](https://github.com/facebook/reason/issues/816#issue-183870566) a
+distinction between build time dependencies and runtime dependencies is helpful
+in relaxing the flattening requirement of package version. In doing so, it will
+be common for multiple versions to exist simultaneously and this organization
+above allows for that. This is useful even when multiple versions are not
+allowed to be linked into one final executable.
+
+## Cross Compiling
+
+Because of the need to distinguish between `buildTimeOnlyDependency` and
+`runTime` dependencies we wanted to support resolving to, and building multiple
+*versions* of one package, in order to minimize conflicts, and mitigate the
+challenge of flattening package version.
+
+But if we allow installing a package with a target architecture that is
+different than the host, then `buildTimeOnlyDependency` doesn't just create an
+opportunity to make flattening easier, which had us building multiple *versions* of
+a package - it also means we *need* to build a package multiple times, once for
+each architecture that is needed. In that case, we could be building two different
+versions, each with the architecture they need - but we could also need to build
+*one* version, multiple times, for different architectures.
+`buildTimeOnlyDependencies` imply that we need to compile those dependencies
+for the host architecture, and other dependencies are implicitly runtime
+dependencies and require building for the target architecture.
+
+We haven't discussed how we allow users to specify the architecture at install time.
+
+We extend the build directories above to allow for this, but suffixing `_install`
+and `_build` with the architecture. By default, it's assumed
+`_install`/`_build` refer to the host architecture.
+
+    Project Directory
+    ========================
+
+    /path/to/MyApp/
+     │                       Findlib Installations 
+     ├── _install/         ----------------------------------------
+     │   └── node_modules/    _install dir mirrors project directory,
+     │       └── ...          contains findlib installations for everything.
+     ├── _install_arm/
+     │   └── node_modules/
+     │       └── ...
+     │
+     ├── _build_arm/         Build Artifacts
+     │   ├── src/            ----------------------------------------
+     │   │   └── ...         _build dir mirrors entire tree.
+     │   └── node_modules/   Contains build artifacts for everything.
+     │       └── ...
+     │
+     ├── package.json        Original Source Files                              
+     ├── src/                ----------------------------------------           
+     │   ├── files.ml        Your typical source directory with node_modules    
+     │   └── ...             containing all dependencies potentially symlinked. 
+     │
+     └── node_modules/
+         └── ...
+
+
 ## This Is Intended For *Any* Build System.
 
 Most of this is not specific to any particular build system, and build systems don't need to know about this *exact* directory structure. When a package is built (via its `postinstall`), `dependencyEnv` sets up environment variables that handles all the logic of figuring out where things should go.
@@ -257,3 +321,9 @@ Others not yet implemented: (`PKG:hash`, `user`, `group`, `make`, `os`,
 ### Not Shown In This Spec
 
 - Opinionated build system conventions such as module aliases/namespaces.
+- How we would implement the system that walks the dependency graph, asking
+  each package to build itself into the correct locations.
+- How we know which architecture to specify when building a package (based on
+  `buildTimeOnlyDependency`, the host architecture, and "target" architecture).
+- How we know how many times to build a package - how many architectures.
+
