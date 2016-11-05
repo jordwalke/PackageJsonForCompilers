@@ -179,21 +179,55 @@ The `findlib` portions of this are optional. Your package builds don't have to u
 
 ## Doing It Right
 
-To properly create a package:
+To properly create a project that uses `PackageJsonForCompilers`:
 
-1. Activate the build utilities via `dependency-env`:
-  - Add [dependency-env](https://github.com/reasonml/dependency-env) to your package's `dependencies`.
-  - In your `postinstall`, prefix your build command with `eval $(dependencyEnv)
-    &&`, in order activate the utilities to help you perform a proper build. For example: `eval $(dependencyEnv) && make`.
+(Instructions currently only for `npm` - `yarn` and others coming soon).
 
-2. Enjoy some benefits of `dependencyEnv`.
-`dependencyEnv` sets the `OCAMLFIND_CONF` environment variable to point to an *automatically* generated `findlib.conf`. This makes it so popular build tooling (`ocamlbuild/rebuild`, `ocamlfind`) can "see" your built `npm` dependencies. `dependencyEnv` also sets up a bunch of other helpful environment variables that your build scripts can use.
+1. Add `PackageJsonForCompilers` to your package's `dependencies`. (This is be
+the replacement for `dependencyEnv`).
+
+2. Create a script named `build` or `build.sh` in the package root directory
+that executes and builds your package.
+  - When it is invoked, it will have all of the appropriate environment
+    variables set to the correct values, as discussed in this document.
+  - You are guaranteed that all dependencies are already build and "installed"
+    into `_install` by the time your build script is executed.
+
+3. Top level applications (that depend on other `PackageJsonForCompilers`
+packages) should include an `.npmrc` file in their repo (More details coming
+soon). This makes it so when you run `npm install`, all the packages you
+transitively depend on will be built optimally, and automatically.  If you
+don't want to include an `.npmrc` file, then after running `npm install`, just
+run `npm run env PackageJsonForCompilers`.
+
+
+### Further Configuration/Usage:
+
+1. Mark the names of dependencies that are *build time only* in a
+`package.json` field called `buildTimeOnlyDependencies`.
+
+2. Enjoy some benefits of `PackageJsonForCompilers`.
+`PackageJsonForCompilers` sets the `OCAMLFIND_CONF` environment variable to
+point to an *automatically* generated `findlib.conf`. This makes it so popular
+build tooling (`ocamlbuild/rebuild`, `ocamlfind`) can "see" your built `npm`
+dependencies that install `findlib` packages. `PackageJsonForCompilers` also
+sets up a bunch of other helpful environment variables that your build scripts
+can use.
 
 3. Respect the `cur__target_dir` environment variable in your build scripts.
-Your build system should try to only generate artifacts inside of `cur__target_dir`. This makes sure your package build works with symlinks, and multiple simultaneous versions of your package.
+Your build system should try to only generate artifacts inside of
+`cur__target_dir`. This makes sure your package build works with symlinks, and
+multiple simultaneous versions of your package.
 
-4. Respect the `cur__install` environment variable in your build scripts:
-So far your package build plays nice, and can build correctly because it can "see" its dependencies at build time via `findlib.conf`. That's good but it doesn't mean *your* package's artifacts will be visible to *other* packages that depend on *you*! To make your package available and visible to your dependers, your build system should generate a `META` file, and *install* it (along with a subset of the artifacts) into `cur__install` (`ocamlfind install -destdir $cur__install $cur__name META`).
+4. Respect the `cur__install` environment variable in your build scripts: So
+far your package build plays nice, and can build correctly because it can "see"
+its dependencies at build time via `findlib.conf`. That's good but it doesn't
+mean *your* package's artifacts will be visible to *other* packages that depend
+on *you* and look for you via `findlib`! To make your package available and
+visible to your dependers via `findlib`, your build system should generate a
+`META` file, and *install* it (along with a subset of the artifacts) into
+`cur__install` (`ocamlfind install -destdir $cur__install $cur__name META`).
+
 
 |Environment Variable| Meaning                                                            | Equivalent To                        |
 |--------------------|--------------------------------------------------------------------|--------------------------------------|
