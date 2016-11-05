@@ -24,3 +24,11 @@ which causes `magicCommand` to behave as a noop for any package except the top
 level package being installed.
 
 
+# More Ways To Help:
+
+- Making sure all the build systems we use or build (Rebel, BuckleScript's build system) all abide by the same convention and let packages know where their artifacts are stored (this proposal uses `findlib` convention - but we could change the proposal). Rebel doesn't yet use `findlib`.
+- Generally poking holes in the proposal and describing how it can be improved. Identifying technology that already exists that could be used instead for some pieces.
+- Propose a cross-platform plan so that Windows works.
+- Helping to make the doc more organized. Help to make it clear how others can help.
+- Helping to identify how all the work could be broken up into pieces of ownership.
+- Building a version of the `ocaml` package that can cross compile simply with a `--target-arch` flag etc. (it may not be that hard actually! Just make a package that embeds two ocaml compilers and forwards arguments to the right version based on the `--target` flag)
