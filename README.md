@@ -129,7 +129,6 @@ visible to your dependers via `findlib`, your build system should generate a
 `META` file, and *install* it (along with a subset of the artifacts) into
 `cur__install` (`ocamlfind install -destdir $cur__install $cur__name META`).
 
-
 ## Details
 
 This document describes a proposal for laying out directories for sources, artifacts, as well as some utilities that we plan to provide to compilers/build systems in order for them to work seamlessly within this directory convention. It should ideally create some shared conventions that `ocamlopt`/`ocamlc`/`BuckleScript`/`opam`, and possibly even `clang` packages can abide by in order to seamlessly depend on each other - even in the face of multiple versions, or multiple targetted architectures. Build systems do not have to generate or even be aware of this directory structure, they merely need to use a couple of utilities in order required to work well within it.
@@ -689,3 +688,20 @@ artifacts to exist in harmony, simultaneously.
 - How we know how many times to build a package - how many architectures.
 
 
+
+
+## Wait, `npm`? What's going On In the Install Process
+
+All `npm install` does is installs your dependencies' source files into a
+directory (`node_modules`) by convention. `pjc build` is what actually builds
+everything. Therefore, `pjc build` could easily be made to work in other
+package managers that install dependency source files into a known location.
+
+`npm` *does* have a hook for each package to build `postinstall` - and you'd *think* that it
+would be suficient - but it has issues (it's not parallel, and it doesn't have
+all the great environment variables setup correctly when it executes them, it certainly
+does not do us the favor of invoking builds multiple times when building for multiple
+architectures (in coordination with `buildTimeOnlyDependencies`)).
+Still, wouldn't it be nice to avoid the need to run `pjc build` after `npm install`?
+We can add that feature later - it involves some clever tricks (`.nmprc` files), but
+it's best to currently focus on getting everything else right.
