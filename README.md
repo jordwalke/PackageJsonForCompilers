@@ -1,10 +1,136 @@
-#PackageJsonForCompilers
+#PackageJsonForCompilers (`pjc`) Proposal
 
-Sandboxing Native Compilation And Then Some
+Convention and Workflow for Sandboxed Native Compilation.
 
-> Note: This has little to nothing to do with node - just by convention, we assume
+The main package name, and CLI command name we'll use in this doc is `pjc`
+but we will replace it with a better name later. `pjc` will be a replacement
+for `dependency-env`, and then some. It doesn't yet exist.
+
+> Note: This has little to nothing to do with `node`/`npm` - just by convention, we assume
 that sources for dependencies are placed into `node_modules`, but we could have
 just as easily named that directory anything else.
+
+
+## Install `pjc` Globally (Note: don't actually do this yet - this is a proposal)
+
+`pjc` is the *last* globally installed program you'll need. It lets you
+interact with, build, debug, and explore local project sandboxes.
+
+```
+npm install -g pjc
+```
+
+## Make and Build a Project
+
+Add `pjc` to your `package.json` project dependencies, and specify how `pjc`
+should build your project in the `pjc.build` field.
+
+```json
+{
+  "dependencies": {
+    "pjc": "*"
+  },
+  "pjc": {
+    "build": "yourBuildCommand"
+  }
+}
+```
+
+Install your dependencies, then build your project from the top level package.
+
+```sh
+npm install
+pjc build
+```
+
+All the `pjc.build` commands in the dependency graph will be invoked at the
+right time, in parallel, and with an environment that automatically contains
+all the right environment variables each package needs to correctly build. The
+remainder of this doc describes the meaning of those variables and how to use
+them to ensure your packages are good citizens.
+
+#### Running Sandboxed Commands
+
+
+When invoked, `pjc` will always search to see if you're in a project directory
+that has `pjc` installed, and if so, it will forward all your requests to that
+version.
+
+In general, you can just pass any command after `pjc`, and it will run your
+command "in the sandbox". Whatever command that follows `pjc` will be executed
+with visibility into all of the, binaries, libraries, and paths, that your
+build produced.
+
+```sh
+
+# Run the standard `env` command, in the sandbox
+pjc env
+
+# Returns empty
+which myBuildArtifact.exe
+
+# Returns the path in sandbox successfully 
+pjc which myBuildArtifact.exe
+```
+
+There are a few builtin commands which take precedence over the commands you
+supply after `pjc`.
+
+|Built-in Command| Action                                                                     |
+|----------------|----------------------------------------------------------------------------|
+| `pjc build`    | Build the project in parallel, from the top level package                  |
+| `pjc shell`    | Source all environment variables for your sandbox, after `deshell`ing any previously active `pjc shell`|
+| `pjc deshell`  | Restore the environment to the way it was before the most recent `pjc shell` |
+
+
+#### Exporting Environment Variables
+
+The `pjc.env` field allows you to set environment variables that your sandboxed
+commands can see, and that your dependers can see.
+
+```json
+{
+  "dependencies": {
+    "pjc": "*"
+  },
+  "pjc: {
+    "build": "yourBuildCommand",
+    "envVars": {
+      "USER_NAME": "Jack"
+    }
+  }
+}
+```
+
+### Further Configuration/Usage:
+
+1. Mark the names of dependencies that are *build time only* in a
+`package.json` field called `buildTimeOnlyDependencies`.
+
+2. Enjoy some benefits of `pjc`.
+`pjc` sets the `OCAMLFIND_CONF` environment variable to
+point to an *automatically* generated `findlib.conf`. This makes it so popular
+build tooling (`ocamlbuild/rebuild`, `ocamlfind`) can "see" your built `npm`
+dependencies that install `findlib` packages. `pjc` also
+sets up a bunch of other helpful environment variables that your build scripts
+can use.
+
+3. Respect the `cur__target_dir` environment variable in your build scripts.
+Your build system should try to only generate artifacts inside of
+`cur__target_dir`. This makes sure your package build works with symlinks, and
+multiple simultaneous versions of your package.
+
+4. Respect the `cur__install` environment variable in your build scripts: So
+far your package build plays nice, and can build correctly because it can "see"
+its dependencies at build time via `findlib.conf`. That's good but it doesn't
+mean *your* package's artifacts will be visible to *other* packages that depend
+on *you* and look for you via `findlib`! To make your package available and
+visible to your dependers via `findlib`, your build system should generate a
+`META` file, and *install* it (along with a subset of the artifacts) into
+`cur__install` (`ocamlfind install -destdir $cur__install $cur__name META`).
+
+
+## Details
 
 This document describes a proposal for laying out directories for sources, artifacts, as well as some utilities that we plan to provide to compilers/build systems in order for them to work seamlessly within this directory convention. It should ideally create some shared conventions that `ocamlopt`/`ocamlc`/`BuckleScript`/`opam`, and possibly even `clang` packages can abide by in order to seamlessly depend on each other - even in the face of multiple versions, or multiple targetted architectures. Build systems do not have to generate or even be aware of this directory structure, they merely need to use a couple of utilities in order required to work well within it.
 
@@ -173,64 +299,13 @@ Expanding out even further:
 ## This Is Intended For *Any* Build System.
 
 Most of this is not specific to any particular build system, and build systems
-don't need to know about this *exact* directory structure. When `PackageJsonForCompilers` builds
-your package (by looking for its `build.sh` script), `PackageJsonForCompilers`
+don't need to know about this *exact* directory structure. When `pjc` builds
+your package (by looking for its `pjc.build` field), `pjc`
 sets up environment variables that handles all the logic of figuring out where
 things should go.
 
 ## This Is Intended For *Any* Language.
-The `findlib` portions of this are optional. Your package builds don't have to use them - but you may be able to adapt `findlib` to your langauge as well. Take it or leave it - it's not critical to `PackageJsonForCompilers`.
-
-## Doing It Right
-
-To properly create a project that uses `PackageJsonForCompilers`:
-
-(Instructions currently only for `npm` - `yarn` and others coming soon).
-
-1. Add `PackageJsonForCompilers` to your package's `dependencies`. (This is be
-the replacement for `dependencyEnv`).
-
-2. Create a script named `build` or `build.sh` in the package root directory
-that executes and builds your package.
-  - When it is invoked, it will have all of the appropriate environment
-    variables set to the correct values, as discussed in this document.
-  - You are guaranteed that all dependencies are already build and "installed"
-    into `_install` by the time your build script is executed.
-
-3. Top level applications (that depend on other `PackageJsonForCompilers`
-packages) should include an `.npmrc` file in their repo (More details coming
-soon). This makes it so when you run `npm install`, all the packages you
-transitively depend on will be built optimally, and automatically.  If you
-don't want to include an `.npmrc` file, then after running `npm install`, just
-run `npm run env PackageJsonForCompilers`.
-
-
-### Further Configuration/Usage:
-
-1. Mark the names of dependencies that are *build time only* in a
-`package.json` field called `buildTimeOnlyDependencies`.
-
-2. Enjoy some benefits of `PackageJsonForCompilers`.
-`PackageJsonForCompilers` sets the `OCAMLFIND_CONF` environment variable to
-point to an *automatically* generated `findlib.conf`. This makes it so popular
-build tooling (`ocamlbuild/rebuild`, `ocamlfind`) can "see" your built `npm`
-dependencies that install `findlib` packages. `PackageJsonForCompilers` also
-sets up a bunch of other helpful environment variables that your build scripts
-can use.
-
-3. Respect the `cur__target_dir` environment variable in your build scripts.
-Your build system should try to only generate artifacts inside of
-`cur__target_dir`. This makes sure your package build works with symlinks, and
-multiple simultaneous versions of your package.
-
-4. Respect the `cur__install` environment variable in your build scripts: So
-far your package build plays nice, and can build correctly because it can "see"
-its dependencies at build time via `findlib.conf`. That's good but it doesn't
-mean *your* package's artifacts will be visible to *other* packages that depend
-on *you* and look for you via `findlib`! To make your package available and
-visible to your dependers via `findlib`, your build system should generate a
-`META` file, and *install* it (along with a subset of the artifacts) into
-`cur__install` (`ocamlfind install -destdir $cur__install $cur__name META`).
+The `findlib` portions of this are optional. Your package builds don't have to use them - but you may be able to adapt `findlib` to your langauge as well. Take it or leave it - it's not critical to `pjc`.
 
 
 |Environment Variable| Meaning                                                            | Equivalent To                        |
@@ -276,12 +351,12 @@ friendly / caching friendly.
 
 Sometimes, your dependencies want to communicate values/paths to you. They can
 do this easily in their `package.json`'s `exportedEnvVars` field, which causes
-those values to be visible to your `PackageJsonForCompilers` build scripts.
+those values to be visible to your `pjc` build scripts.
 
 Some environment variables are *automatically* published without them even
 having to specify them. If `my-package` has a *direct* dependency on
-`my-dependency`, then whenever `PackageJsonForCompilers` runs `my-package`'s
-`build.sh` script runs, `buils.sh` will see the following environment variables
+`my-dependency`, then whenever `pjc` runs `my-package`'s
+`pjc.build` script, the `pjc.build` command will see the following environment variables
 changed:
 
 
@@ -334,7 +409,7 @@ This is very different than our app pulling in two versions of the standard
 library at *runtime*. That would legitimately cause conflicts and it's
 reasonable for the package manager/build system to tell us to fix the conflict.
 
-`PackageJsonForCompilers` will support a `package.json` config property called
+`pjc` will support a `package.json` config property called
 [`buildTimeOnlyDependencies`](https://github.com/facebook/reason/issues/816#issue-183870566).
 
 While they don't yet make use of it, package managers should take
@@ -344,16 +419,16 @@ relax their task of resolving to one version per package. But even if package
 managers don't take this into account, we can still build as if they did, and
 create tooling for for generating shrinkwrap/lock files as if they *did*.  Or,
 if you just let `npm`/`yarn` do their thing and install multiple versions,
-`PackageJsonForCompilers` will work well at compile time, and likely even link
+`pjc` will work well at compile time, and likely even link
 time because:
 
-1. `PackageJsonForCompilers` will support building multiple versions per
+1. `pjc` will support building multiple versions per
 package. As usual, `node_modules` ensures that there is (literally) space for
 multiple versions of source code for them. The exact shape of the `_build` and
 `_install` directories ensures that there is (literally) space for multiple
 versions to be built.
 
-2. `PackageJsonForCompilers` will ensure that if there are multiple versions of
+2. `pjc` will ensure that if there are multiple versions of
 your dependency at build time, your package will see the *right* version.  All
 of the environment variables will be set accordingly, and `findlib` will be
 configured such that you compile against the *right* version. Multiple versions
@@ -382,7 +457,7 @@ related to `buildTimeOnlyDependencies`. Cross compiling happens when for
 different than the host architecture. Mobile toolchain compilers are the most
 mainstream use case you'll likely encounter.
 
-When installing/building a dependency graph, `PackageJsonForCompilers` pays
+When installing/building a dependency graph, `pjc` pays
 attention to your `TARGET_ARCHITECTURE` environment variable (which you can
 export in your `package.json`'s `exportedEnvVars` field). By default
 `TARGET_ARCHITECTURE` is assumed to be equal to your host architecture if
@@ -391,7 +466,7 @@ unspecified.
 That, among other things, influences whether or not a package is cross
 compiled.
 
-`PackageJsonForCompilers` makes "space" to build cross compiled packages
+`pjc` makes "space" to build cross compiled packages
 without stepping on your regular artifacts, by suffixing `_install` and
 `_build` with the architecture. By default, it's assumed `_install`/`_build`
 refer to the host architecture. Here's what that would look like for
@@ -447,7 +522,7 @@ everything is simple.
 
 
 If `TARGET_ARCHITECTURE` is empty, (defaulted to host), then no matter what,
-`PackageJsonForCompilers` will build everything according to the simplest
+`pjc` will build everything according to the simplest
 convention.
 
 
@@ -521,11 +596,11 @@ building.
 Now, consider if `TARGET_ARCHITECTURE` is `arm64` (different than host), and
 *only the dependency from `PackageA` to `PackageC`* is marked in
 `buildTimeOnlyDependencies`. There's still *one* version of `PackageC`
-resolved, but it changes the number of times `PackageJsonForCompilers` will
+resolved, but it changes the number of times `pjc` will
 compile it.  `PackageA` needs to run `PackageC` at build time (so on the host
 architecture) and `PackageB` needs to run `PackageC` at runtime. Since the
 runtime architecture is different than the build time architecture,
-`PackageJsonForCompilers` will ensure that at package install time, `PackageC`
+`pjc` will ensure that at package install time, `PackageC`
 is compiled twice into appropriately suffixed `_build`/`_install` directories,
 even though there's only one *version* of `PackageC`'s source resolved on disk.
 
@@ -562,7 +637,7 @@ even though there's only one *version* of `PackageC`'s source resolved on disk.
 
 
 
-So `PackageJsonForCompilers`'s directory layout is flexible enough to support
+So `pjc`'s directory layout is flexible enough to support
 compiling of multiple versions of a *single* package, in their isolated
 quarantined areas, but this last example shows that it's also flexible enough
 to support a *single* version of a package compiled *multiple times* in the
@@ -601,8 +676,8 @@ Quickly consider if `PackageB` where listed in `buildTimeOnlyDependencies` of
   `TARGET_ARCHITECTURE` - it is the *host* architecture.
 
 
-`PackageJsonForCompilers` handles all of these cases and provides physical
-space for all of these artifacts to exist in harmony, simultaneously.
+`pjc` handles all of these cases and provides physical space for all of these
+artifacts to exist in harmony, simultaneously.
 
 ### Not Shown In This Spec
 
