@@ -200,14 +200,19 @@ and `_build` with the architecture. By default, it's assumed
      ├── _install/         ----------------------------------------
      │   └── node_modules/    _install dir mirrors project directory,
      │       └── ...          contains findlib installations for everything.
-     ├── _install_arm/
+     ├── _install_arm64/
      │   └── node_modules/
      │       └── ...
      │
-     ├── _build_arm/         Build Artifacts
+     ├── _build/             Build Artifacts
      │   ├── src/            ----------------------------------------
      │   │   └── ...         _build dir mirrors entire tree.
      │   └── node_modules/   Contains build artifacts for everything.
+     │       └── ...
+     ├── _build_arm64/    
+     │   ├── src/         
+     │   │   └── ...      
+     │   └── node_modules/
      │       └── ...
      │
      ├── package.json        Original Source Files                              
@@ -217,6 +222,7 @@ and `_build` with the architecture. By default, it's assumed
      │
      └── node_modules/
          └── ...
+
 
 
 ## This Is Intended For *Any* Build System.
