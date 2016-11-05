@@ -192,38 +192,41 @@ We extend the build directories above to allow for this, but suffixing `_install
 and `_build` with the architecture. By default, it's assumed
 `_install`/`_build` refer to the host architecture.
 
+
     Project Directory
     ========================
 
     /path/to/MyApp/
-     │                       Findlib Installations 
-     ├── _install/         ----------------------------------------
+     │                        Findlib Installations 
+     ├── _install/            ----------------------------------------
      │   └── node_modules/    _install dir mirrors project directory,
      │       └── ...          contains findlib installations for everything.
-     ├── _install_arm64/
-     │   └── node_modules/
-     │       └── ...
      │
      ├── _build/             Build Artifacts
      │   ├── src/            ----------------------------------------
      │   │   └── ...         _build dir mirrors entire tree.
      │   └── node_modules/   Contains build artifacts for everything.
      │       └── ...
-     ├── _build_arm64/    
-     │   ├── src/         
-     │   │   └── ...      
-     │   └── node_modules/
-     │       └── ...
      │
+     │                       ╮
+     ├── _install_arm64/     ┊
+     │   └── node_modules/   ┊
+     │       └── ...         ┊
+     │                       ┊
+     ├── _build_arm64/       ┊ Same structure as above, but for packages that must
+     │   ├── src/            ┊ be compiled for a different runtime architecture.
+     │   │   └── ...         ┊
+     │   └── node_modules/   ┊
+     │       └── ...         ┊
+     │                       ╯
      ├── package.json        Original Source Files                              
-     ├── src/                ----------------------------------------           
+     ├── src/                 ----------------------------------------           
      │   ├── files.ml        Your typical source directory with node_modules    
      │   └── ...             containing all dependencies potentially symlinked. 
      │
      └── node_modules/
          └── ...
-
-
+         
 
 ## This Is Intended For *Any* Build System.
 
