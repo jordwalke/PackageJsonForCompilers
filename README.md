@@ -2,17 +2,24 @@
 
 Sandboxing Native Compilation And Then Some
 
-Here's a suggestion that sets up the build system to work well with our other `ocamlopt` projects, and interop well with the ocaml ecosystem. Build systems do not have to generate this structure, they merely need the features required to work within it.
+> Note: This has little to nothing to do with node - just by convention, we assume
+that sources for dependencies are placed into `node_modules`, but we could have
+just as easily named that directory anything else.
 
-General layout of build tree.
+This document describes a proposal for laying out directories for sources, artifacts, as well as some utilities that we plan to provide to compilers/build systems in order for them to work seamlessly within this directory convention. It should ideally create some shared conventions that `ocamlopt`/`ocamlc`/`BuckleScript`/`opam`, and possibly even `clang` packages can abide by in order to seamlessly depend on each other - even in the face of multiple versions, or multiple targetted architectures. Build systems do not have to generate or even be aware of this directory structure, they merely need to use a couple of utilities in order required to work well within it.
+
+General features required:
 - Allows multiple versions of packages to coexist (it's important).
 - Builds out of source, installs out of source.
   - That enables symlinking of packages (important).
-- Plays nice with ocamlfind.
-- Allows cleaning up of build artifacts trivially, without 
+- Plays nice with `ocamlfind`.
+- Allows cleaning up of build artifacts trivially, merely by deleting a single `_build` directory.
+- Supports `opam` variables and attempts to make it feasible to build an adapter that allows seamless OPAM interop.
 
+Desirable Outcome:
+One click depending on `opam` files withing a cross compiled environment - all build systems should do the right thing, and put artifacts in the right place inside of the sandbox, with a single `yarn install` or `npm install`.
 
-In general, we have a top level package, with dependencies inside of `node_modules`, and two directories `_build` and `_install` which each mirror the entire directory.
+In general, we have a top level package, with dependencies inside of `node_modules`, and two directories `_build` and `_install` which each mirror the entire sandbox.
     
     Project Directory
     ========================
@@ -163,6 +170,110 @@ Expanding out even further:
 
 
 
+## This Is Intended For *Any* Build System.
+
+Most of this is not specific to any particular build system, and build systems don't need to know about this *exact* directory structure. When a package is built (via its `postinstall`), `dependencyEnv` sets up environment variables that handles all the logic of figuring out where things should go.
+
+## This Is Intended For *Any* Language.
+The `findlib` portions of this are optional. Your package builds don't have to use them - but you may be able to adapt `findlib` to your langauge as well. Take it or leave it - it's not critical to `PackageJsonForCompilers`.
+
+## Doing It Right
+
+To properly create a package:
+
+1. Activate the build utilities via `dependency-env`:
+  - Add [dependency-env](https://github.com/reasonml/dependency-env) to your package's `dependencies`.
+  - In your `postinstall`, prefix your build command with `eval $(dependencyEnv)
+    &&`, in order activate the utilities to help you perform a proper build. For example: `eval $(dependencyEnv) && make`.
+
+2. Enjoy some benefits of `dependencyEnv`.
+`dependencyEnv` sets the `OCAMLFIND_CONF` environment variable to point to an *automatically* generated `findlib.conf`. This makes it so popular build tooling (`ocamlbuild/rebuild`, `ocamlfind`) can "see" your built `npm` dependencies. `dependencyEnv` also sets up a bunch of other helpful environment variables that your build scripts can use.
+
+3. Respect the `cur__target_dir` environment variable in your build scripts.
+Your build system should try to only generate artifacts inside of `cur__target_dir`. This makes sure your package build works with symlinks, and multiple simultaneous versions of your package.
+
+4. Respect the `cur__install` environment variable in your build scripts:
+So far your package build plays nice, and can build correctly because it can "see" its dependencies at build time via `findlib.conf`. That's good but it doesn't mean *your* package's artifacts will be visible to *other* packages that depend on *you*! To make your package available and visible to your dependers, your build system should generate a `META` file, and *install* it (along with a subset of the artifacts) into `cur__install` (`ocamlfind install -destdir $cur__install $cur__name META`).
+
+|Environment Variable| Meaning                                                            | Equivalent To                        |
+|--------------------|--------------------------------------------------------------------|--------------------------------------|
+| `cur__name`  | Normalized name of package name (converts hyphens to underscores)        |                                      |
+| `cur__target_dir`  | Where build artifacts should go for the currently building package  | Cargo's `CARGO_TARGET_DIR` (loosely) |
+| `cur__install`     | Install root for currently building package. Contains lib/bin/etc   | OPAM's `prefix` var, but is a dedicated install directory just for this package |
+
+
+## Environment Variables
+
+When `your-package` is being built, `cur__target_dir` and `cur__install` are
+set to the artifact and install destinations for `your-package`. This helps
+avoid cluttering up your source files with artifacts, and keeps it symlink
+friendly / caching friendly.
+
+#### More Variables Visible To Your Package Build Scripts
+
+|Environment Var | Meaning                                                                    | Equivalent To             |
+|----------------|----------------------------------------------------------------------------|---------------------------|
+| `FINDLIB_CONF` | Path to precomputed findlib.conf file, exposing `cur`'s dependencies       |                           |
+| `version`      | Version of the current dependencyEnv package                               | Opam's `opam-version`     |
+| `sandbox`      | Path to top level package being installed - the thing you git cloned       |                           |
+| `_install_tree`| Path to install tree, which contains all prefixes, for all packages        |                           |
+| `_build_tree`  | Path to build tree, which contains all build directories, for all packages |                           |
+| `cur__lib`     | Path to `lib` directory in `cur__install`                                  | Opam's `lib`                |
+| `cur__bin`     | Path to `bin` directory in `cur__install`                                  | Opam's `bin`                |
+| `cur__sbin`    | Path to `sbin` directory in `cur__install`                                 | Opam's `sbin`               |
+| `cur__doc`     | Path to `doc` directory in `cur__install`                                  | Opam's `doc`                |
+| `cur__stublibs`| Path to `stublibs` directory in `cur__install`                             | Opam's `stublibs`           |
+| `cur__toplevel`| Path to `toplevel` directory in `cur__install`                             | Opam's `toplevel`           |
+| `cur__man`     | Path to `man` directory in `cur__install`                                  | Opam's `man`                |
+| `cur__share`   | Path to `share` directory in `cur__install`                                | Opam's `share`              |
+| `cur__etc`     | Path to `etc` directory in `cur__install`                                  | Opam's `etc`                |
+
+###### Opam Variables That Don't Make Sense To Recreate
+
+|Environment Variable|
+|--------------------|
+| `root`             |
+
+#### Variables Automatically Published by *Your* Dependencies
+
+Sometimes, your dependencies want to communicate values/paths to you. They can do this easily in their `package.json`'s `exportedEnvVars` field, which causes those values to be visible to your build scripts (as long as you do `eval $(dependencyEnv)`).
+
+Some environment variables are *automatically* published without them even having to specify them. If `my-package` has a *direct* dependency on `my-dependency`, then whenever `my-package` invokes `eval $(dependencyEnv)`, it will see the following environment variables changed:
+
+
+|Environment Variable     | Your Package's Dependers See This Value As     | Equivalent To                           | Implemented |
+|-------------------------|------------------------------------------------|-----------------------------------------|-------------|
+|`PATH`                   | Augmented with `my_dependency__bin`            |                                         | No          |
+|`MAN_PATH`               | Augumented with `my_dependency__man`           | OPAM's `PKG:name` but not transitive    | No          |
+|`my_dependency__name`    | Normalized name of the `my-dependency` (`my_dependency`) | OPAM's `PKG:name` but not transitive    | No          |
+|`my_dependency__version` | Version of the `my-dependency`                 | OPAM's `PKG:version` but not transitive | No          |
+|`my_dependency__depends` | Resolved direct dependencies of `my-dependency`| OPAM's `PKG:depends`                    |             |
+|`my_dependency__bin`     | Binary install directory for `my-dependency`   | OPAM's `PKG:bin` but not transitive     | No          |
+|`my_dependency__sbin`    | System install Binary directory for `my-dependency`| OPAM's `PKG:sbin` but not transitive| No          |
+|`my_dependency__lib`     | Library install directory for `my-dependency`  | OPAM's `PKG:lib` but not transitive     | No          |
+|`my_dependency__man`     | Man install directory for `my-dependency`      | OPAM's `PKG:man` but not transitive     | No          |
+|`my_dependency__doc`     | Docs install directory for `my-dependency`     | OPAM's `PKG:doc` but not transitive     | No          |
+|`my_dependency__share`   | Share install directory for `my-dependency`    | OPAM's `PKG:share` but not transitive   | No          |
+|`my_dependency__etc`     | Etc install directory for `my-dependency`      | OPAM's `PKG:etc` but not transitive     | No          |
+
+
+Many of these variables have OPAM equivalents, with the exception that they are only published by *immediate* dependencies. The reason is that unlike OPAM, we support multiple versions per package in the transitive dependency graph - so some of these variables would no longer be well-defined if we allowed them to be published by transitive dependencies.
+
+The following OPAM variables will be more difficult to implement as environment variables, but we should support them anyways.
+
+|OPAM var        |                                                 | Difficult Because                                                                 | Implemented |
+|----------------|-------------------------------------------------|-----------------------------------------------------------------------------------|-------------|
+|`PKG:installed` | Whether the package is installed                | Need to scan "optionalDeps" and set false if missing                              | No          |
+|`PKG:enable`    | "enable" or "disable" depending on if installed | "                                                                                 | No          |
+|`PKG:build`     | Where `my-dependency` ended up being built      | We *tell* packages where to build. They might not respect that - how do we know?  | No          |
+
+
+Others not yet implemented: (`PKG:hash`, `user`, `group`, `make`, `os`,
+`ocaml-version`, `opam-version` `compiler`, `preinstalled`, `switch`, `jobs`,
+`ocaml-native`, `ocaml-native-tool`, `ocaml-native-dynli`, `arch` )
+
+
+
 
 ## `buildTimeOnlyDependencies`
 
@@ -279,15 +390,8 @@ refer to the host architecture. Here's what that would look like for
 
 
 
-
-#### Scenarios where `MyDependency` should/shouldn't be cross compiled:
-
-|Scenario                                                                                         |Cross Compiled To     | Explanation                                                                  |
-|--------------------------------------                                                           |------------------    |------------------------------------------------------------------------------|
-| `MyDependency` is in `buildTimeOnlyDependencies` - Doesn't matter what `TARGET_ARCHITECTURE` is |None                  | Package only needed for "build time" which happens on *your machine*, period.|
-| `MyDependency` is not in `buildTimeOnlyDependencies` and `TARGET_ARCHITECTURE` differs from host|`TARGET_ARCHITECTURE `|It's a runtime dependency, so must be compiled for `TARGET_ARCHITECTURE`      |
-| `MyDependency` is not in `buildTimeOnlyDependencies` and `TARGET_ARCHITECTURE` *matches* host   |None                  | It's a runtime dependency, but can just compile for the host architecture. |
-
+It is not immediately obvious how many architectures a package at a specific version
+needs to be compiled for.
 We get into some interesting scenarios when looking at how package manager
 resolution combines with `buildTimeOnlyDependencies`, `TARGET_ARCHITECTURE`.
 
@@ -455,109 +559,6 @@ Quickly consider if `PackageB` where listed in `buildTimeOnlyDependencies` of
 
 `PackageJsonForCompilers` handles all of these cases and provides physical
 space for all of these artifacts to exist in harmony, simultaneously.
-
-## This Is Intended For *Any* Build System.
-
-Most of this is not specific to any particular build system, and build systems don't need to know about this *exact* directory structure. When a package is built (via its `postinstall`), `dependencyEnv` sets up environment variables that handles all the logic of figuring out where things should go.
-
-## This Is Intended For *Any* Language.
-The `findlib` portions of this are optional. Your package builds don't have to use them - but you may be able to adapt `findlib` to your langauge as well. Take it or leave it - it's not critical to `PackageJsonForCompilers`.
-
-## Doing It Right
-
-To properly create a package:
-
-1. Activate the build utilities via `dependency-env`:
-  - Add [dependency-env](https://github.com/reasonml/dependency-env) to your package's `dependencies`.
-  - In your `postinstall`, prefix your build command with `eval $(dependencyEnv)
-    &&`, in order activate the utilities to help you perform a proper build. For example: `eval $(dependencyEnv) && make`.
-
-2. Enjoy some benefits of `dependencyEnv`.
-`dependencyEnv` sets the `OCAMLFIND_CONF` environment variable to point to an *automatically* generated `findlib.conf`. This makes it so popular build tooling (`ocamlbuild/rebuild`, `ocamlfind`) can "see" your built `npm` dependencies. `dependencyEnv` also sets up a bunch of other helpful environment variables that your build scripts can use.
-
-3. Respect the `cur__target_dir` environment variable in your build scripts.
-Your build system should try to only generate artifacts inside of `cur__target_dir`. This makes sure your package build works with symlinks, and multiple simultaneous versions of your package.
-
-4. Respect the `cur__install` environment variable in your build scripts:
-So far your package build plays nice, and can build correctly because it can "see" its dependencies at build time via `findlib.conf`. That's good but it doesn't mean *your* package's artifacts will be visible to *other* packages that depend on *you*! To make your package available and visible to your dependers, your build system should generate a `META` file, and *install* it (along with a subset of the artifacts) into `cur__install` (`ocamlfind install -destdir $cur__install $cur__name META`).
-
-|Environment Variable| Meaning                                                            | Equivalent To                        |
-|--------------------|--------------------------------------------------------------------|--------------------------------------|
-| `cur__name`  | Normalized name of package name (converts hyphens to underscores)        |                                      |
-| `cur__target_dir`  | Where build artifacts should go for the currently building package  | Cargo's `CARGO_TARGET_DIR` (loosely) |
-| `cur__install`     | Install root for currently building package. Contains lib/bin/etc   | OPAM's `prefix` var, but is a dedicated install directory just for this package |
-
-
-## Environment Variables
-
-When `your-package` is being built, `cur__target_dir` and `cur__install` are
-set to the artifact and install destinations for `your-package`. This helps
-avoid cluttering up your source files with artifacts, and keeps it symlink
-friendly / caching friendly.
-
-#### More Variables Visible To Your Package Build Scripts
-
-|Environment Var | Meaning                                                                    | Equivalent To             |
-|----------------|----------------------------------------------------------------------------|---------------------------|
-| `FINDLIB_CONF` | Path to precomputed findlib.conf file, exposing `cur`'s dependencies       |                           |
-| `version`      | Version of the current dependencyEnv package                               | Opam's `opam-version`     |
-| `sandbox`      | Path to top level package being installed - the thing you git cloned       |                           |
-| `_install_tree`| Path to install tree, which contains all prefixes, for all packages        |                           |
-| `_build_tree`  | Path to build tree, which contains all build directories, for all packages |                           |
-| `cur__lib`     | Path to `lib` directory in `cur__install`                                  | Opam's `lib`                |
-| `cur__bin`     | Path to `bin` directory in `cur__install`                                  | Opam's `bin`                |
-| `cur__sbin`    | Path to `sbin` directory in `cur__install`                                 | Opam's `sbin`               |
-| `cur__doc`     | Path to `doc` directory in `cur__install`                                  | Opam's `doc`                |
-| `cur__stublibs`| Path to `stublibs` directory in `cur__install`                             | Opam's `stublibs`           |
-| `cur__toplevel`| Path to `toplevel` directory in `cur__install`                             | Opam's `toplevel`           |
-| `cur__man`     | Path to `man` directory in `cur__install`                                  | Opam's `man`                |
-| `cur__share`   | Path to `share` directory in `cur__install`                                | Opam's `share`              |
-| `cur__etc`     | Path to `etc` directory in `cur__install`                                  | Opam's `etc`                |
-
-###### Opam Variables That Don't Make Sense To Recreate
-
-|Environment Variable|
-|--------------------|
-| `root`             |
-
-#### Variables Automatically Published by *Your* Dependencies
-
-Sometimes, your dependencies want to communicate values/paths to you. They can do this easily in their `package.json`'s `exportedEnvVars` field, which causes those values to be visible to your build scripts (as long as you do `eval $(dependencyEnv)`).
-
-Some environment variables are *automatically* published without them even having to specify them. If `my-package` has a *direct* dependency on `my-dependency`, then whenever `my-package` invokes `eval $(dependencyEnv)`, it will see the following environment variables changed:
-
-
-|Environment Variable     | Your Package's Dependers See This Value As     | Equivalent To                           | Implemented |
-|-------------------------|------------------------------------------------|-----------------------------------------|-------------|
-|`PATH`                   | Augmented with `my_dependency__bin`            |                                         | No          |
-|`MAN_PATH`               | Augumented with `my_dependency__man`           | OPAM's `PKG:name` but not transitive    | No          |
-|`my_dependency__name`    | Normalized name of the `my-dependency` (`my_dependency`) | OPAM's `PKG:name` but not transitive    | No          |
-|`my_dependency__version` | Version of the `my-dependency`                 | OPAM's `PKG:version` but not transitive | No          |
-|`my_dependency__depends` | Resolved direct dependencies of `my-dependency`| OPAM's `PKG:depends`                    |             |
-|`my_dependency__bin`     | Binary install directory for `my-dependency`   | OPAM's `PKG:bin` but not transitive     | No          |
-|`my_dependency__sbin`    | System install Binary directory for `my-dependency`| OPAM's `PKG:sbin` but not transitive| No          |
-|`my_dependency__lib`     | Library install directory for `my-dependency`  | OPAM's `PKG:lib` but not transitive     | No          |
-|`my_dependency__man`     | Man install directory for `my-dependency`      | OPAM's `PKG:man` but not transitive     | No          |
-|`my_dependency__doc`     | Docs install directory for `my-dependency`     | OPAM's `PKG:doc` but not transitive     | No          |
-|`my_dependency__share`   | Share install directory for `my-dependency`    | OPAM's `PKG:share` but not transitive   | No          |
-|`my_dependency__etc`     | Etc install directory for `my-dependency`      | OPAM's `PKG:etc` but not transitive     | No          |
-
-
-Many of these variables have OPAM equivalents, with the exception that they are only published by *immediate* dependencies. The reason is that unlike OPAM, we support multiple versions per package in the transitive dependency graph - so some of these variables would no longer be well-defined if we allowed them to be published by transitive dependencies.
-
-The following OPAM variables will be more difficult to implement as environment variables, but we should support them anyways.
-
-|OPAM var        |                                                 | Difficult Because                                                                 | Implemented |
-|----------------|-------------------------------------------------|-----------------------------------------------------------------------------------|-------------|
-|`PKG:installed` | Whether the package is installed                | Need to scan "optionalDeps" and set false if missing                              | No          |
-|`PKG:enable`    | "enable" or "disable" depending on if installed | "                                                                                 | No          |
-|`PKG:build`     | Where `my-dependency` ended up being built      | We *tell* packages where to build. They might not respect that - how do we know?  | No          |
-
-
-Others not yet implemented: (`PKG:hash`, `user`, `group`, `make`, `os`,
-`ocaml-version`, `opam-version` `compiler`, `preinstalled`, `switch`, `jobs`,
-`ocaml-native`, `ocaml-native-tool`, `ocaml-native-dynli`, `arch` )
-
 
 ### Not Shown In This Spec
 
