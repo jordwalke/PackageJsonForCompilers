@@ -172,7 +172,11 @@ Expanding out even further:
 
 ## This Is Intended For *Any* Build System.
 
-Most of this is not specific to any particular build system, and build systems don't need to know about this *exact* directory structure. When a package is built (via its `postinstall`), `dependencyEnv` sets up environment variables that handles all the logic of figuring out where things should go.
+Most of this is not specific to any particular build system, and build systems
+don't need to know about this *exact* directory structure. When `PackageJsonForCompilers` builds
+your package (by looking for its `build.sh` script), `PackageJsonForCompilers`
+sets up environment variables that handles all the logic of figuring out where
+things should go.
 
 ## This Is Intended For *Any* Language.
 The `findlib` portions of this are optional. Your package builds don't have to use them - but you may be able to adapt `findlib` to your langauge as well. Take it or leave it - it's not critical to `PackageJsonForCompilers`.
@@ -248,7 +252,7 @@ friendly / caching friendly.
 |Environment Var | Meaning                                                                    | Equivalent To             |
 |----------------|----------------------------------------------------------------------------|---------------------------|
 | `FINDLIB_CONF` | Path to precomputed findlib.conf file, exposing `cur`'s dependencies       |                           |
-| `version`      | Version of the current dependencyEnv package                               | Opam's `opam-version`     |
+| `version`      | Version of the current package                                             | Opam's `opam-version`     |
 | `sandbox`      | Path to top level package being installed - the thing you git cloned       |                           |
 | `_install_tree`| Path to install tree, which contains all prefixes, for all packages        |                           |
 | `_build_tree`  | Path to build tree, which contains all build directories, for all packages |                           |
@@ -270,9 +274,15 @@ friendly / caching friendly.
 
 #### Variables Automatically Published by *Your* Dependencies
 
-Sometimes, your dependencies want to communicate values/paths to you. They can do this easily in their `package.json`'s `exportedEnvVars` field, which causes those values to be visible to your build scripts (as long as you do `eval $(dependencyEnv)`).
+Sometimes, your dependencies want to communicate values/paths to you. They can
+do this easily in their `package.json`'s `exportedEnvVars` field, which causes
+those values to be visible to your `PackageJsonForCompilers` build scripts.
 
-Some environment variables are *automatically* published without them even having to specify them. If `my-package` has a *direct* dependency on `my-dependency`, then whenever `my-package` invokes `eval $(dependencyEnv)`, it will see the following environment variables changed:
+Some environment variables are *automatically* published without them even
+having to specify them. If `my-package` has a *direct* dependency on
+`my-dependency`, then whenever `PackageJsonForCompilers` runs `my-package`'s
+`build.sh` script runs, `buils.sh` will see the following environment variables
+changed:
 
 
 |Environment Variable     | Your Package's Dependers See This Value As     | Equivalent To                           | Implemented |
@@ -602,4 +612,5 @@ space for all of these artifacts to exist in harmony, simultaneously.
 - How we know which architecture to specify when building a package (based on
   `buildTimeOnlyDependency`, the host architecture, and "target" architecture).
 - How we know how many times to build a package - how many architectures.
+
 
