@@ -93,7 +93,7 @@ commands can see, and that your dependers can see.
   "dependencies": {
     "pjc": "*"
   },
-  "pjc: {
+  "pjc": {
     "build": "yourBuildCommand",
     "envVars": {
       "USER_NAME": "Jack"
