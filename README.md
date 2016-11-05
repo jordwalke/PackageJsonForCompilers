@@ -1,3 +1,7 @@
+#PackageJsonForCompilers
+
+Sandboxing Native Compilation And Then Some
+
 Here's a suggestion that sets up the build system to work well with our other `ocamlopt` projects, and interop well with the ocaml ecosystem. Build systems do not have to generate this structure, they merely need the features required to work within it.
 
 General layout of build tree.
@@ -158,46 +162,92 @@ Expanding out even further:
                             some kind of .links file.                   
 
 
-## BuildTimeOnlyDependencies
 
-As discussed in [this
-issue](https://github.com/facebook/reason/issues/816#issue-183870566) a
-distinction between build time dependencies and runtime dependencies is helpful
-in relaxing the flattening requirement of package version. In doing so, it will
-be common for multiple versions to exist simultaneously and this organization
-above allows for that. This is useful even when multiple versions are not
-allowed to be linked into one final executable.
+
+## `buildTimeOnlyDependencies`
+
+> Note: These have nothing to do with `devDependencies`.
+
+Suppose `MyPackage` depends on `make-v1.2.2` and `MyDependency` depends on
+`make-v1.1.1`. Imagine how unnecessarily difficult it would be if our package
+manager refused to let us install/build both of these versions of `make`. The
+two versions of `make` really have nothing to do with each other and should
+never see each other. They were merely tools that we needed in order to build
+each package.
+
+This is very different than our app pulling in two versions of the standard
+library at *runtime*. That would legitimately cause conflicts and it's
+reasonable for the package manager/build system to tell us to fix the conflict.
+
+`PackageJsonForCompilers` will support a `package.json` config property called
+[`buildTimeOnlyDependencies`](https://github.com/facebook/reason/issues/816#issue-183870566).
+
+While they don't yet make use of it, package managers should take
+`buildTimeOnlyDependencies` into account when resolving package versions and
+deciding how to best flatten - it's a good opportunity for package managers to
+relax their task of resolving to one version per package. But even if package
+managers don't take this into account, we can still build as if they did, and
+create tooling for for generating shrinkwrap/lock files as if they *did*.  Or,
+if you just let `npm`/`yarn` do their thing and install multiple versions,
+`PackageJsonForCompilers` will work well at compile time, and likely even link
+time because:
+
+1. `PackageJsonForCompilers` will support building multiple versions per
+package. As usual, `node_modules` ensures that there is (literally) space for
+multiple versions of source code for them. The exact shape of the `_build` and
+`_install` directories ensures that there is (literally) space for multiple
+versions to be built.
+
+2. `PackageJsonForCompilers` will ensure that if there are multiple versions of
+your dependency at build time, your package will see the *right* version.  All
+of the environment variables will be set accordingly, and `findlib` will be
+configured such that you compile against the *right* version. Multiple versions
+might exist, but you won't see the *wrong* ones.
+
+It's normal for `buildTimeOnlyDependencies` to result in multiple versions of
+packages that are each compiled into their own quarantined `_build` and
+`_install`. It's *not* normal for multiple *versions* of runtime dependencies
+though.
+
+Before package managers support the `buildTimeOnlyDependencies` well, you might
+get in a scenario where you get a link time failure - it won't be due to any
+`buildTimeOnlyDependencies` that you depend on - that link time failure will be
+a genuine package conflict you need to fix. If package managers supported
+`buildTimeOnlyDependencies` well, you would have still had an error - but it
+would have been the package manager letting you know early that there *will* be
+a link time failure. Without help from package managers, you'll just hear about
+it much later, and with a more cryptic error.
 
 ## Cross Compiling
 
-Because of the need to distinguish between `buildTimeOnlyDependency` and
-`runTime` dependencies we wanted to support resolving to, and building multiple
-*versions* of one package, in order to minimize conflicts, and mitigate the
-challenge of flattening package version.
 
-But if we allow installing a package with a target architecture that is
-different than the host, then `buildTimeOnlyDependency` doesn't just create an
-opportunity to make flattening easier, which had us building multiple *versions* of
-a package - it also means we *need* to build a package multiple times, once for
-each architecture that is needed. In that case, we could be building two different
-versions, each with the architecture they need - but we could also need to build
-*one* version, multiple times, for different architectures.
-`buildTimeOnlyDependencies` imply that we need to compile those dependencies
-for the host architecture, and other dependencies are implicitly runtime
-dependencies and require building for the target architecture.
+Cross compiling *sounds* similar but is very different, and only a little bit
+related to `buildTimeOnlyDependencies`. Cross compiling happens when for
+*whatever* reason, a package needs to be compiled to an architecture that is
+different than the host architecture. Mobile toolchain compilers are the most
+mainstream use case you'll likely encounter.
 
-We haven't discussed how we allow users to specify the architecture at install time.
+When installing/building a dependency graph, `PackageJsonForCompilers` pays
+attention to your `TARGET_ARCHITECTURE` environment variable (which you can
+export in your `package.json`'s `exportedEnvVars` field). By default
+`TARGET_ARCHITECTURE` is assumed to be equal to your host architecture if
+unspecified.
 
-We extend the build directories above to allow for this, but suffixing `_install`
-and `_build` with the architecture. By default, it's assumed
-`_install`/`_build` refer to the host architecture.
+That, among other things, influences whether or not a package is cross
+compiled.
+
+`PackageJsonForCompilers` makes "space" to build cross compiled packages
+without stepping on your regular artifacts, by suffixing `_install` and
+`_build` with the architecture. By default, it's assumed `_install`/`_build`
+refer to the host architecture. Here's what that would look like for
+`TARGET_ARCHITECTURE=arm64`.
 
 
     Project Directory
     ========================
 
     /path/to/MyApp/
-     │                        Findlib Installations 
+     │                        Findlib Installation 
      ├── _install/            ----------------------------------------
      │   └── node_modules/    _install dir mirrors project directory,
      │       └── ...          contains findlib installations for everything.
@@ -219,18 +269,199 @@ and `_build` with the architecture. By default, it's assumed
      │   └── node_modules/   ┊
      │       └── ...         ┊
      │                       ╯
-     ├── package.json        Original Source Files                              
-     ├── src/                 ----------------------------------------           
-     │   ├── files.ml        Your typical source directory with node_modules    
-     │   └── ...             containing all dependencies potentially symlinked. 
+     ├── package.json        Original Source Files
+     ├── src/                 ----------------------------------------
+     │   ├── files.ml        Your typical source directory with node_modules
+     │   └── ...             containing all dependencies potentially symlinked.
      │
      └── node_modules/
          └── ...
-         
+
+
+
+
+#### Scenarios where `MyDependency` should/shouldn't be cross compiled:
+
+|Scenario                                                                                         |Cross Compiled To     | Explanation                                                                  |
+|--------------------------------------                                                           |------------------    |------------------------------------------------------------------------------|
+| `MyDependency` is in `buildTimeOnlyDependencies` - Doesn't matter what `TARGET_ARCHITECTURE` is |None                  | Package only needed for "build time" which happens on *your machine*, period.|
+| `MyDependency` is not in `buildTimeOnlyDependencies` and `TARGET_ARCHITECTURE` differs from host|`TARGET_ARCHITECTURE `|It's a runtime dependency, so must be compiled for `TARGET_ARCHITECTURE`      |
+| `MyDependency` is not in `buildTimeOnlyDependencies` and `TARGET_ARCHITECTURE` *matches* host   |None                  | It's a runtime dependency, but can just compile for the host architecture. |
+
+We get into some interesting scenarios when looking at how package manager
+resolution combines with `buildTimeOnlyDependencies`, `TARGET_ARCHITECTURE`.
+
+Consider the following scenario. The package manager (or `shrinkwrap` etc) has
+resolved `PackageC` to a single version, though multiple packages depend on it.
+There is one location for `PackageC`'s source code (likely in
+`node_modules/C`). If nothing is marked as a `buildTimeOnlyDependencies`, then
+everything is simple.
+
+
+If `TARGET_ARCHITECTURE` is empty, (defaulted to host), then no matter what,
+`PackageJsonForCompilers` will build everything according to the simplest
+convention.
+
+
+    Dependency Graph       Artifacts
+    ----------------       ---------------------
+
+
+    ╭─────────╮            PackageA/
+    │PackageA │            │
+    └─┬─────┬─┘            ├── _install/
+      │     │              │   ├── ...
+      │     │              │   └── node_modules/
+      │     └────┐         │       ├── PackageB
+      │          │         │       │   └── ...
+      │          │         │       └── PackageC
+      │          │         │           └── ...
+      │     ╭────▼───╮     ├── _build/
+      │     │PackageB│     │   ├── ...
+      │     └────────┘     │   └── node_modules/
+      │          │         │       ├── PackageB
+      │          │         │       │   └── ...
+      │          │         │       └── PackageC
+      │          │         │           └── ...
+    ╭─▼──────────▼─╮       ├── package.json
+    │PackageC-1.0.0│       ├── src/
+    └──────────────┘       │   └── mainPackageA.ml
+                           │
+                           └── node_modules/
+                               ├── PackageB
+                               │   └── ...
+                               └── PackageC
+                                   └── ...
+
+
+
+Similarly, any of the arrows in the above dependency diagram could be listed in
+the parent package's `buildTimeOnlyDependencies`, and nothing would change
+because no matter what, everything needs to run on the host architecture (build
+time or not!) and since there's only one `PackageC` source, we only need to
+build it at most once.
+
+If `TARGET_ARCHITECTURE` is `arm64` (different than host), and *nothing* is
+marked in `buildTimeOnlyDependencies`, then everything must be clearly be
+compiled for `arm64`, and no dependencies need to execute on the host for
+building.
+
+    Dependency Graph       Artifacts
+    ----------------       ---------------------
+
+    ╭─────────╮            PackageA/
+    │PackageA │            │
+    └─┬─────┬─┘            ├── _install_arm64/
+      │     │              │   ├── ...
+      │     │              │   └── node_modules/
+      │     └────┐         │       ├── PackageB
+      │          │         │       │   └── ...
+      │          │         │       └── PackageC
+      │          │         │           └── ...
+      │     ╭────▼───╮     ├── _build_arm64/
+      │     │PackageB│     │   ├── ...
+      │     └────────┘     │   └── node_modules/
+      │          │         │       ├── PackageB
+      │          │         │       │   └── ...
+      │          │         │       └── PackageC
+      │          │         │           └── ...
+    ╭─▼──────────▼─╮       ...
+    │PackageC-1.0.0│
+    └──────────────┘
+
+
+Now, consider if `TARGET_ARCHITECTURE` is `arm64` (different than host), and
+*only the dependency from `PackageA` to `PackageC`* is marked in
+`buildTimeOnlyDependencies`. There's still *one* version of `PackageC`
+resolved, but it changes the number of times `PackageJsonForCompilers` will
+compile it.  `PackageA` needs to run `PackageC` at build time (so on the host
+architecture) and `PackageB` needs to run `PackageC` at runtime. Since the
+runtime architecture is different than the build time architecture,
+`PackageJsonForCompilers` will ensure that at package install time, `PackageC`
+is compiled twice into appropriately suffixed `_build`/`_install` directories,
+even though there's only one *version* of `PackageC`'s source resolved on disk.
+
+      Dependency Graph       Artifacts
+      ----------------       ---------------------
+
+      ╭─────────╮            PackageA/
+      │PackageA │            │
+      └─┬─────┬─┘            ├── _install/
+        │     │              │   └── node_modules/
+        │     │              │       └── PackageC    ╮
+        │     └────┐         │           └── ...     ┊ Only PackageC is compiled for
+        │          │         ├── _build/             ┊ the build host architecture.
+    buildTimeOnly  │         │   └── node_modules/   ┊ It's the only one needed at build time
+        │          │         │       └── PackageC    ╯
+        │     ╭────▼───╮     │           └── ...
+        │     │PackageB│     │
+        │     └────────┘     ├── _install_arm64/     ╮
+        │          │         │   ├── ...             ┊
+        │          │         │   └── node_modules/   ┊
+        │          │         │       ├── PackageC    ┊ Everything else, is compiled for the
+        │          │         │       │   └── ...     ┊ TARGET_ARCHITECTURE. Including C!
+      ╭─▼──────────▼─╮       │       └── PackageB    ┊ It is still needed at runtime
+      │PackageC-1.0.0│       │           └── ...     ┊ even though it was also needed at
+      └──────────────┘       ├── _build_arm64/       ┊ build time.
+                             │   ├── ...             ┊
+                             │   └── node_modules/   ┊
+                             │       ├── PackageC    ┊
+                             │       │   └── ...     ╯
+                             │       └── PackageB
+                             │           └── ...
+                             ...
+
+
+
+
+So `PackageJsonForCompilers`'s directory layout is flexible enough to support
+compiling of multiple versions of a *single* package, in their isolated
+quarantined areas, but this last example shows that it's also flexible enough
+to support a *single* version of a package compiled *multiple times* in the
+case of a different `TARGET_ARCHITECTURE`.
+
+
+Quickly consider if `PackageB` where listed in `buildTimeOnlyDependencies` of
+`PackageA`, while `TARGET_ARCHITECTURE` was `arm64` as before.
+
+      ╭─────────╮
+      │PackageA │
+      └─┬─────┬─┘
+        │     │
+        │     │
+        │     └────┐
+        │          │
+        │     buildTimeOnlyDependency
+        │          │
+        │     ╭────▼───╮
+        │     │PackageB│
+        │     └────────┘
+        │          │
+        │          │
+        │          │
+        │          │
+      ╭─▼──────────▼─╮
+      │PackageC-1.0.0│
+      └──────────────┘
+
+- `PackageA` must be compiled for the `TARGET_ARCHITECTURE`.
+- `PackageC` must be compiled for the `TARGET_ARCHITECTURE` because it's needed by `PackageA` at runtime.
+- `PackageB` must be compiled for the host.
+- `PackageC` must be compiled for the host as well! Even though `PackageC` is a
+  *runtime* dependency of `PackageB`! When `PackageB` acts as a
+  `buildTimeOnlyDependency`, `PackageB`'s "runtime", is not the
+  `TARGET_ARCHITECTURE` - it is the *host* architecture.
+
+
+`PackageJsonForCompilers` handles all of these cases and provides physical
+space for all of these artifacts to exist in harmony, simultaneously.
 
 ## This Is Intended For *Any* Build System.
 
 Most of this is not specific to any particular build system, and build systems don't need to know about this *exact* directory structure. When a package is built (via its `postinstall`), `dependencyEnv` sets up environment variables that handles all the logic of figuring out where things should go.
+
+## This Is Intended For *Any* Language.
+The `findlib` portions of this are optional. Your package builds don't have to use them - but you may be able to adapt `findlib` to your langauge as well. Take it or leave it - it's not critical to `PackageJsonForCompilers`.
 
 ## Doing It Right
 
