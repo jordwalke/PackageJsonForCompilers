@@ -115,19 +115,20 @@ dependencies that install `findlib` packages. `pjc` also
 sets up a bunch of other helpful environment variables that your build scripts
 can use.
 
-3. Respect the `cur__target_dir` environment variable in your build scripts.
+3. Respect the `my_package__target_dir` environment variable in your build scripts.
 Your build system should try to only generate artifacts inside of
-`cur__target_dir`. This makes sure your package build works with symlinks, and
+`my_package__target_dir`. This makes sure your package build works with symlinks, and
 multiple simultaneous versions of your package.
 
-4. Respect the `cur__install` environment variable in your build scripts: So
+4. Respect the `my_package__install` environment variable in your build scripts: So
 far your package build plays nice, and can build correctly because it can "see"
 its dependencies at build time via `findlib.conf`. That's good but it doesn't
 mean *your* package's artifacts will be visible to *other* packages that depend
 on *you* and look for you via `findlib`! To make your package available and
 visible to your dependers via `findlib`, your build system should generate a
 `META` file, and *install* it (along with a subset of the artifacts) into
-`cur__install` (`ocamlfind install -destdir $cur__install $cur__name META`).
+`my_package__install` (`ocamlfind install -destdir $my_package__install
+$my_package__name META`).
 
 ## Details
 
@@ -304,54 +305,67 @@ sets up environment variables that handles all the logic of figuring out where
 things should go.
 
 ## This Is Intended For *Any* Language.
-The `findlib` portions of this are optional. Your package builds don't have to use them - but you may be able to adapt `findlib` to your langauge as well. Take it or leave it - it's not critical to `pjc`.
+The `findlib` portions of this are optional. Your package builds don't have to use them - but you may be able to adapt `findlib` to your language as well. Take it or leave it - it's not critical to `pjc`.
 
 ## Environment Variables
 
-When `your-package` is being built, `cur__target_dir` and `cur__install` are
-set to the artifact and install destinations for `your-package`. This helps
-avoid cluttering up your source files with artifacts, and keeps it symlink
-friendly / caching friendly.
+When `my-package` is being built, `my_package__target_dir` and
+`my_package__install` are set to the artifact and install destinations for
+`my-package`. This helps avoid cluttering up your source files with
+artifacts, and keeps it symlink friendly / caching friendly.
 
 |Environment Variable| Meaning                                                            | Equivalent To                        |
 |--------------------|--------------------------------------------------------------------|--------------------------------------|
-| `cur__name`        | Normalized name of package name (converts hyphens to underscores)  |                                      |
-| `cur__target_dir`  | Where build scripts should place artifacts for *currently building* package | Cargo's `CARGO_TARGET_DIR` (loosely) |
-| `cur__install`     | Install root for *currently building* package. Contains lib/bin/etc  | OPAM's `prefix` var, but is a dedicated install directory just for this package |
-
-
-The naming uses `cur__` to represent the *currently* building package. This
-might be confusing when `cur__` environment variables are referenced in *other*
-packages, so watch out. For example, suppose that `A --dependsOn--> B`, and `A`
-has a config file that references `cur__root`, and that `B` *also* has a config
-file referencing `cur__root`. When `B` is building, `cur__root` references
-`B`'s source root. When `A` is building, it references `A`'s source root. But
-if while `A` is building, we reference `B`'s configuration, then `cur__` means
-`A`. This actually happens a lot because (as you'll see), `A`'s environment
-variables are set up by consulting `B`'s config.
-
-
+| `my_package__name`      | Normalized name of package name (converts hyphens to underscores)  |                                      |
+| `my_package__target_dir`| Where build scripts should place artifacts for `my-package` | Cargo's `CARGO_TARGET_DIR` (loosely) |
+| `my_package__install`   | Install root for `my-package`. Contains lib/bin/etc  | OPAM's `prefix` var, but is a dedicated install directory just for this package |
 
 #### More Variables Visible To Your Package Build Scripts
 
-|Environment Var | Meaning                                                                    | Equivalent To             |
-|----------------|----------------------------------------------------------------------------|---------------------------|
+|Environment Var | Meaning                                                                     | Equivalent To             |
+|----------------|---------------------------------------------------------------------------- |---------------------------|
 | `FINDLIB_CONF` | Path to precomputed findlib.conf file in `cur_target_dir`, exposing `cur`'s dependencies|              |
-| `version`      | Version of the current package                                             | Opam's `opam-version`     |
-| `sandbox`      | Path to top level package being installed - the thing you git cloned       |                           |
-| `_install_tree`| Path to sandbox install tree, which contains all prefixes, for all packages|                           |
+| `sandbox`      | Path to top level package being installed - the thing you git cloned        |                           |
+| `_install_tree`| Path to sandbox install tree, which contains all prefixes, for all packages |                           |
 | `_build_tree`  | Path to sandbox build tree, contains all build directories, for all packages|                           |
-| `cur__root`    | Path to root of source tree for *currently building* package               | Opam's `lib`                |
-| `cur__lib`     | Path to `lib` directory in `cur__install`                                  | Opam's `lib`                |
-| `cur__lib`     | Path to `lib` directory in `cur__install`                                  | Opam's `lib`                |
-| `cur__bin`     | Path to `bin` directory in `cur__install`                                  | Opam's `bin`                |
-| `cur__sbin`    | Path to `sbin` directory in `cur__install`                                 | Opam's `sbin`               |
-| `cur__doc`     | Path to `doc` directory in `cur__install`                                  | Opam's `doc`                |
-| `cur__stublibs`| Path to `stublibs` directory in `cur__install`                             | Opam's `stublibs`           |
-| `cur__toplevel`| Path to `toplevel` directory in `cur__install`                             | Opam's `toplevel`           |
-| `cur__man`     | Path to `man` directory in `cur__install`                                  | Opam's `man`                |
-| `cur__share`   | Path to `share` directory in `cur__install`                                | Opam's `share`              |
-| `cur__etc`     | Path to `etc` directory in `cur__install`                                  | Opam's `etc`                |
+|`my_package__name`    | Normalized name of the `my-package` (`my_package`) | OPAM's `PKG:name` but not transitive    | No          |
+|`my_package__version` | Version of the `my-package`                 | OPAM's `PKG:version` but not transitive | No          |
+|`my_package__root`    | Path to root of source tree for `my-package`| Opam's `lib`                |
+|`my_package__depends` | Resolved direct dependencies of `my-package`| OPAM's `PKG:depends`                    |             |
+|`my_package__bin`     | Binary install directory for `my-package`   | OPAM's `PKG:bin` but not transitive     | No          |
+|`my_package__sbin`    | System install Binary directory for `my-package`| OPAM's `PKG:sbin` but not transitive| No          |
+|`my_package__lib`     | Library install directory for `my-package`  | OPAM's `PKG:lib` but not transitive     | No          |
+|`my_package__man`     | Man install directory for `my-package`      | OPAM's `PKG:man` but not transitive     | No          |
+|`my_package__doc`     | Docs install directory for `my-package`     | OPAM's `PKG:doc` but not transitive     | No          |
+|`my_package__stublibs`| Path to `stublibs` directory in `my_package__install`  | Opam's `stublibs`           |
+|`my_package__toplevel`| Path to `toplevel` directory in `my_package__install`  | Opam's `toplevel`           |
+|`my_package__share`   | Share install directory for `my-package`    | OPAM's `PKG:share` but not transitive   | No          |
+|`my_package__etc`     | Etc install directory for `my-package`      | OPAM's `PKG:etc` but not transitive     | No          |
+
+#### Dependencies' Variables Visible To Your Package Build Scripts
+
+Your package build scripts also automatically see some helpful environment
+variables that describe each of your *immediate* dependencies.
+
+For every env var above that contains `my_package`, an equivalent
+env var is created for each of your package's immediate dependency
+(`my_dependency__bin` for example).
+
+In addition, a couple of environment variables are automatically augmented in
+the following ways, for all dependencies.
+
+|Environment Variable     | Your Package's Dependers See This Value As     | Equivalent To                           | Implemented |
+|-------------------------|------------------------------------------------|-----------------------------------------|-------------|
+|`PATH`                   | Augmented with `my_dependency__bin`            |                                         | No          |
+|`MAN_PATH`               | Augmented with `my_dependency__man`           | OPAM's `PKG:name` but not transitive    | No          |
+
+#### Variables Automatically Visible to You *and* Your Dependencies
+
+Sometimes, you want to make additional values/paths available to your dependencies and that has been
+[discussed](#Exporting Environment Variables). That allows you to specify in
+*your* `package.json` which values should be visible to *dependers'* `pjc`
+build scripts, and *also* your dependers' environment variable configs.
+
 
 ###### Opam Variables That Don't Make Sense To Recreate
 
@@ -360,32 +374,19 @@ variables are set up by consulting `B`'s config.
 | `root`             |
 
 
-#### Variables Automatically Published by *Your* Dependencies
-Sometimes, your dependencies want to communicate values/paths to you and that has been
-[discussed](#Exporting Environment Variables). That causes
-those values to be visible to *your* `pjc` build scripts as a package that *depends*
-on those packages that export env vars.
-Some environment variables are *automatically* published without them even
-having to specify them. If `my-package` has a *direct* dependency on
-`my-dependency`, then whenever `pjc` runs `my-package`'s
-`pjc.build` script, the `pjc.build` command will see the following environment variables
-changed:
+#### Ultra-Dynamic environment config.
 
+Any time you see an environment variable beginning with `my_package__x` above,
+there's another form `cur__x` which represents the respective value for the
+*currently building package*. `cur__` is not always the same as `my_package`.
 
-|Environment Variable     | Your Package's Dependers See This Value As     | Equivalent To                           | Implemented |
-|-------------------------|------------------------------------------------|-----------------------------------------|-------------|
-|`PATH`                   | Augmented with `my_dependency__bin`            |                                         | No          |
-|`MAN_PATH`               | Augumented with `my_dependency__man`           | OPAM's `PKG:name` but not transitive    | No          |
-|`my_dependency__name`    | Normalized name of the `my-dependency` (`my_dependency`) | OPAM's `PKG:name` but not transitive    | No          |
-|`my_dependency__version` | Version of the `my-dependency`                 | OPAM's `PKG:version` but not transitive | No          |
-|`my_dependency__depends` | Resolved direct dependencies of `my-dependency`| OPAM's `PKG:depends`                    |             |
-|`my_dependency__bin`     | Binary install directory for `my-dependency`   | OPAM's `PKG:bin` but not transitive     | No          |
-|`my_dependency__sbin`    | System install Binary directory for `my-dependency`| OPAM's `PKG:sbin` but not transitive| No          |
-|`my_dependency__lib`     | Library install directory for `my-dependency`  | OPAM's `PKG:lib` but not transitive     | No          |
-|`my_dependency__man`     | Man install directory for `my-dependency`      | OPAM's `PKG:man` but not transitive     | No          |
-|`my_dependency__doc`     | Docs install directory for `my-dependency`     | OPAM's `PKG:doc` but not transitive     | No          |
-|`my_dependency__share`   | Share install directory for `my-dependency`    | OPAM's `PKG:share` but not transitive   | No          |
-|`my_dependency__etc`     | Etc install directory for `my-dependency`      | OPAM's `PKG:etc` but not transitive     | No          |
+For example, suppose that `A --dependsOn--> B`, and `A` has a config file that
+references `cur__root`, and that `B` *also* has a config file referencing
+`cur__root`. When `B` is building, `cur__root` references `B`'s source root.
+When `A` is building, `A`'s config file's `cur__root` references `A`'s source
+root. But if *while* `A` is building, we reference `B`'s configuration, then
+`cur__` means `A`'s root. This can happens in practice because (as you'll see),
+`A`'s environment variables are set up by consulting `B`'s config.
 
 
 Many of these variables have OPAM equivalents, with the exception that they are only published by *immediate* dependencies. The reason is that unlike OPAM, we support multiple versions per package in the transitive dependency graph - so some of these variables would no longer be well-defined if we allowed them to be published by transitive dependencies.
@@ -738,3 +739,4 @@ to any package that transitively depends on the package that publishes the globa
 However, with `buildTimeOnlyDependencies`, things get more
 complicated because we will end up with multiple versions of packages simultaneously and
 they will all be trying to set the same globals that are propagated. What convention should be used?
+
