@@ -714,3 +714,18 @@ and it will have all their transitive dependencies. That's *needed* for linking.
 would be better if we *also* exposed a second findlib configuration that packages can use
 for compiling, which would ensure that they are not depending on the implementation details
 of packages (and therefore compile successfully *misleadingly*).
+
+- What should the visibility of global environment variables be?
+We know that we want many variables to be transitively propagated: flags such as default
+`CAMLRUNPARAM` (to ensure that by default stack traces are enabled etc). We also use
+global transitive propagation to compute the `FINDLIB` joined transitive dependency library paths.
+We (in `dependency-env` current - and continuing in `pjc`) provide a field
+called `global` in the environment variable config which allows the variable to be visible
+to any package that transitively depends on the package that publishes the global var.
+However, with `buildTimeOnlyDependencies`, things get more
+complicated because we will end up with multiple versions of packages simultaneously and
+they will all be trying to set the same globals that are propagated.
+Given that this only occurs with `buildTimeOnlyDependencies`, it seems there should be a very
+intuitive convention for how these global variables should be visible (or not) based on
+whether or not it's being set by something in the `buildTimeOnlyDependencies` dependency sub-graph.
+What is the convention?
