@@ -325,7 +325,7 @@ friendly / caching friendly.
 
 |Environment Var | Meaning                                                                    | Equivalent To             |
 |----------------|----------------------------------------------------------------------------|---------------------------|
-| `FINDLIB_CONF` | Path to precomputed findlib.conf file, exposing `cur`'s dependencies       |                           |
+| `FINDLIB_CONF` | Path to precomputed findlib.conf file in `cur_target_dir`, exposing `cur`'s dependencies|              |
 | `version`      | Version of the current package                                             | Opam's `opam-version`     |
 | `sandbox`      | Path to top level package being installed - the thing you git cloned       |                           |
 | `_install_tree`| Path to install tree, which contains all prefixes, for all packages        |                           |
@@ -705,3 +705,12 @@ architectures (in coordination with `buildTimeOnlyDependencies`)).
 Still, wouldn't it be nice to avoid the need to run `pjc build` after `npm install`?
 We can add that feature later - it involves some clever tricks (`.nmprc` files), but
 it's best to currently focus on getting everything else right.
+
+
+## Questions:
+- Can we make it so that build scripts have two `findlib` toolchains - one for compiling and
+one for linking? Initially we'll just be exposing the one findlib configuration for both -
+and it will have all their transitive dependencies. That's *needed* for linking. But it
+would be better if we *also* exposed a second findlib configuration that packages can use
+for compiling, which would ensure that they are not depending on the implementation details
+of packages (and therefore compile successfully *misleadingly*).
