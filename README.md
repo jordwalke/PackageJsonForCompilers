@@ -306,20 +306,31 @@ things should go.
 ## This Is Intended For *Any* Language.
 The `findlib` portions of this are optional. Your package builds don't have to use them - but you may be able to adapt `findlib` to your langauge as well. Take it or leave it - it's not critical to `pjc`.
 
-
-|Environment Variable| Meaning                                                            | Equivalent To                        |
-|--------------------|--------------------------------------------------------------------|--------------------------------------|
-| `cur__name`  | Normalized name of package name (converts hyphens to underscores)        |                                      |
-| `cur__target_dir`  | Where build artifacts should go for the currently building package  | Cargo's `CARGO_TARGET_DIR` (loosely) |
-| `cur__install`     | Install root for currently building package. Contains lib/bin/etc   | OPAM's `prefix` var, but is a dedicated install directory just for this package |
-
-
 ## Environment Variables
 
 When `your-package` is being built, `cur__target_dir` and `cur__install` are
 set to the artifact and install destinations for `your-package`. This helps
 avoid cluttering up your source files with artifacts, and keeps it symlink
 friendly / caching friendly.
+
+|Environment Variable| Meaning                                                            | Equivalent To                        |
+|--------------------|--------------------------------------------------------------------|--------------------------------------|
+| `cur__name`        | Normalized name of package name (converts hyphens to underscores)  |                                      |
+| `cur__target_dir`  | Where build scripts should place artifacts for *currently building* package | Cargo's `CARGO_TARGET_DIR` (loosely) |
+| `cur__install`     | Install root for *currently building* package. Contains lib/bin/etc  | OPAM's `prefix` var, but is a dedicated install directory just for this package |
+
+
+The naming uses `cur__` to represent the *currently* building package. This
+might be confusing when `cur__` environment variables are referenced in *other*
+packages, so watch out. For example, suppose that `A --dependsOn--> B`, and `A`
+has a config file that references `cur__root`, and that `B` *also* has a config
+file referencing `cur__root`. When `B` is building, `cur__root` references
+`B`'s source root. When `A` is building, it references `A`'s source root. But
+if while `A` is building, we reference `B`'s configuration, then `cur__` means
+`A`. This actually happens a lot because (as you'll see), `A`'s environment
+variables are set up by consulting `B`'s config.
+
+
 
 #### More Variables Visible To Your Package Build Scripts
 
@@ -328,8 +339,10 @@ friendly / caching friendly.
 | `FINDLIB_CONF` | Path to precomputed findlib.conf file in `cur_target_dir`, exposing `cur`'s dependencies|              |
 | `version`      | Version of the current package                                             | Opam's `opam-version`     |
 | `sandbox`      | Path to top level package being installed - the thing you git cloned       |                           |
-| `_install_tree`| Path to install tree, which contains all prefixes, for all packages        |                           |
-| `_build_tree`  | Path to build tree, which contains all build directories, for all packages |                           |
+| `_install_tree`| Path to sandbox install tree, which contains all prefixes, for all packages|                           |
+| `_build_tree`  | Path to sandbox build tree, contains all build directories, for all packages|                           |
+| `cur__root`    | Path to root of source tree for *currently building* package               | Opam's `lib`                |
+| `cur__lib`     | Path to `lib` directory in `cur__install`                                  | Opam's `lib`                |
 | `cur__lib`     | Path to `lib` directory in `cur__install`                                  | Opam's `lib`                |
 | `cur__bin`     | Path to `bin` directory in `cur__install`                                  | Opam's `bin`                |
 | `cur__sbin`    | Path to `sbin` directory in `cur__install`                                 | Opam's `sbin`               |
