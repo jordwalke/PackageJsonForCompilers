@@ -346,12 +346,12 @@ friendly / caching friendly.
 |--------------------|
 | `root`             |
 
+
 #### Variables Automatically Published by *Your* Dependencies
-
-Sometimes, your dependencies want to communicate values/paths to you. They can
-do this easily in their `package.json`'s `exportedEnvVars` field, which causes
-those values to be visible to your `pjc` build scripts.
-
+Sometimes, your dependencies want to communicate values/paths to you and that has been
+[discussed](#Exporting Environment Variables). That causes
+those values to be visible to *your* `pjc` build scripts as a package that *depends*
+on those packages that export env vars.
 Some environment variables are *automatically* published without them even
 having to specify them. If `my-package` has a *direct* dependency on
 `my-dependency`, then whenever `pjc` runs `my-package`'s
@@ -724,8 +724,4 @@ called `global` in the environment variable config which allows the variable to 
 to any package that transitively depends on the package that publishes the global var.
 However, with `buildTimeOnlyDependencies`, things get more
 complicated because we will end up with multiple versions of packages simultaneously and
-they will all be trying to set the same globals that are propagated.
-Given that this only occurs with `buildTimeOnlyDependencies`, it seems there should be a very
-intuitive convention for how these global variables should be visible (or not) based on
-whether or not it's being set by something in the `buildTimeOnlyDependencies` dependency sub-graph.
-What is the convention?
+they will all be trying to set the same globals that are propagated. What convention should be used?
