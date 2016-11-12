@@ -721,6 +721,43 @@ Quickly consider if `PackageB` where listed in `buildTimeOnlyDependencies` of
 `pjc` handles all of these cases and provides physical space for all of these
 artifacts to exist in harmony, simultaneously.
 
+
+
+#### Incremental Package Rebuilds
+
+When performing operations such as adding, updating, or removing installed
+package sources into the tree, many packages will require building. It's not
+always intuitive which ones will require building.  When you add a package, the
+package manager might have needed to change another seemingly unrelated version
+of a package to dedupe. So pretty much anytime an operation occurs which could
+change anything in the dependency graph, we need to evaluate which packages
+require rebuilding.
+
+
+Since `pjc` is an *overlay* on top of package managers, we don't have/want
+hooks into any particular package manager's update/install operations.
+
+Instead, every time we perform an operation such as building, we'll record the
+package dependency graph, including where on disk each package is, and where
+each of their dependencies live, and write it to `.pjc.latest.json`.  This is
+very easy to do with `npm` - after each `pjc` build command we will run `npm la
+-json` which outputs the graph, and write it to `.pjc.latest.json`.  Then,
+after doing any pacakge `install/update` commands, the *next* `pjc build`
+command can do the same (`npm la -json`) and do a diff between
+`.pjc.latest.json`, in order to determine which packages changed. We consider
+those "dirty" nodes. Then we traverse the dependency graph, and rebuild any
+node that is dirty or that *transitively* depends on those dirty nodes. We
+build that subgraph in topological order, and in parallel - just as we normally
+would for any `pjc build` operation. The internal implementation that
+walks the graph, should always just accept a subgraph to walk - and by default
+it will just assume the *entire* dependency graph.
+The major difference with incremental builds, is that before building each
+individual package (with the environment automatically prepared), we first
+clean the prior build. If packages respect the artifact/install locations,
+it's as easy as removing those directories and recreating them before running
+the build scripts.
+
+
 ### Not Shown In This Spec
 
 - Opinionated build system conventions such as module aliases/namespaces.
