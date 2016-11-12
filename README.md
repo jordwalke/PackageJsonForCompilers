@@ -130,6 +130,35 @@ visible to your dependers via `findlib`, your build system should generate a
 `my_package__install` (`ocamlfind install -destdir $my_package__install
 $my_package__name META`).
 
+#### `findlib`/`ocamlfind`.
+
+`findlib`/`ocamlfind` are existing technologies that at first seems totally redundant with
+`package.json` but serve a different purpose. `findlib` lets you declare `libraries` and
+group them into `findlib packages` (which are different than `npm` packages).
+
+In short, these `findlib` packages tracks which flags must be passed to a compiler,
+and a linker, in a way that makes it much easier on your build scripts.  It
+allows you to basically "name" a set of build artifacts into "libraries" and then
+group those into "packages" (again, different concept than `npm` pacakge),
+and then allow other `npm` pacakges to refer to that `findlib` package by name.
+Instead of having to pass all the flags to a compiler/linker for every artifact,
+`findlib`/`ocamlfind` allow you to just pass `-pkg myPackageName`.
+The file that records which artifacts are grouped into `myPackageName`, is
+the `META` file.
+Each `npm` package is expected to generate their own `findlib`
+library *if it even wants to*. We'll supply an environment variable that helps
+build scripts for each `npm` package know where to install their `findlib`
+"package".
+It's super annoying to write the `META` file, so if you're making a new build
+system that works well with `PackageJsonForCompilers`, you should just have your
+build system just generate it and put it into the `my_package__install` directory
+which will be initialized by `PackageJsonForCompilers`.
+
+Why do we need convenient hooks for adding a bunch of artifacts to
+compilers/linkers? Because every `npm` pacakge uses its own build system, and
+this is a way to allow all `npm` packages that use the same compiler
+to share a convention for interop regardless of their build system.
+
 ## Details
 
 This document describes a proposal for laying out directories for sources, artifacts, as well as some utilities that we plan to provide to compilers/build systems in order for them to work seamlessly within this directory convention. It should ideally create some shared conventions that `ocamlopt`/`ocamlc`/`BuckleScript`/`opam`, and possibly even `clang` packages can abide by in order to seamlessly depend on each other - even in the face of multiple versions, or multiple targetted architectures. Build systems do not have to generate or even be aware of this directory structure, they merely need to use a couple of utilities in order required to work well within it.
