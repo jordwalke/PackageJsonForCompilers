@@ -1,17 +1,35 @@
 #PackageJsonForCompilers (`pjc`) Proposal
 
-Convention and Workflow for Sandboxed Native Compilation.
+`PackageJsonForCompilers` is a specification for how `package.json` packages can perform
+native compilation, while still enjoying what makes the `npm` workflows great.
 
-The main package name, and CLI command name we'll use in this doc is `pjc`
-but we will replace it with a better name later. `pjc` will be a replacement
-for `dependency-env`, and then some. It doesn't yet exist.
+Features:
+- Cross compilation (within a project, build dependencies for your local machine and/or a mobile device that has a different architecture).
+- Work well with symlinks for rapid development.
+- Parallelize builds. Recover builds.
+- Build awesome/interactive dashboards that explain what is going on when building projects, or changing dependencies.
+- Export your entire project to a `Makefile` or shell script that can run on any network isolated machine, even if that machine does not have `node`/`npm`/`opam`/`crate` installed etc.
+
+- `pjc` is not a build system for any particular compiler. It is a "meta build system",
+that helps all your individual pacakges' build systems work in harmony together, and then
+exposes an approachable *human* interface to that process.
+- `pjc` is not a package manager. It only requires that package sources be located entirely on disk
+before it begins working. It follows the `npm` directory structure convention, but this isn't
+central to `pjc`. What *is* central is that `pjc` tollerate multiple versions of packages existing
+simultaneously.
+- Package managers like `yarn` could make use of `pjc` packages' `package.json` fields in order to
+perform a more optimal installation (deduping more optimally).
+
+The command name we'll use in this doc is `pjc`,
+but concretely, we've started a reference implementation of `pjc` called [`esy`](https://github.com/jordwalke/esy) (as in Easy).
+
 
 > Note: This has little to nothing to do with `node`/`npm` - just by convention, we assume
 that sources for dependencies are placed into `node_modules`, but we could have
 just as easily named that directory anything else.
 
 
-## Install `pjc` Globally (Note: don't actually do this yet - this is a proposal)
+## Global Installation of `pjc`
 
 `pjc` is the *last* globally installed program you'll need. It lets you
 interact with, build, debug, and explore local project sandboxes.
@@ -43,29 +61,35 @@ npm install
 pjc build
 ```
 
-All the `pjc.build` commands in the dependency graph will be invoked at the
+When you invoke `pjc build`, all the `pjc.build` commands in the dependency
+graph's `package.json` files will be invoked in the right order, at the
 right time, in parallel, and with an environment that automatically contains
-all the right environment variables each package needs to correctly build. The
-remainder of this doc describes the meaning of those variables and how to use
-them to ensure your packages are good citizens.
+all the right environment variables that each package needs to build harmoniously.
+The majority of this doc describes the meaning of those environment variables
+and how to use them to ensure your packages are good citizens.
 
 #### Running Sandboxed Commands
 
+`pjc build` is one of the very few "built in" commands (which builds the entire graph).
+Except for the few built in commands, `pjc` can be invoked with *arbitrary* shell commands:
 
-When invoked, `pjc` will always search to see if you're in a project directory
-that has `pjc` installed, and if so, it will forward all your requests to that
-version.
+```
+pjc which merlin
+pjc your command here
+```
 
-In general, you can just pass any command after `pjc`, and it will run your
-command "in the sandbox". Whatever command that follows `pjc` will be executed
-with visibility into all of the, binaries, libraries, and paths, that your
-build produced.
+When you prefix a shell command with `pjc`, it causes the command to "see all the right things"
+from your project sandbox. The underlying philosophy of `package.json` projects, is that it's
+a bad idea to just install things globally without modeling the fact that your projects depend
+on those thing. Furthermore, multiple projects could depend on two different conflicting versions
+of a tool, so installing those globally are out of the question. Anytime you make a `package.json`,
+you're *defining* a sandbox that correctly models these dependencies and avoids many of those issues.
+
+Prefixing commands like `pjc yourcommand here` allows `yourcommand here` to see the dependencies
+that are modeled in `package.json`. That means the command will be able to see a `PATH` augmented
+with binaries that your dependencies build, and much much more.
 
 ```sh
-
-# Run the standard `env` command, in the sandbox
-pjc env
-
 # Returns empty
 which myBuildArtifact.exe
 
@@ -73,7 +97,16 @@ which myBuildArtifact.exe
 pjc which myBuildArtifact.exe
 ```
 
-There are a few builtin commands which take precedence over the commands you
+
+
+> When invoked, `pjc` will always search to see if you're in a project directory
+that has `pjc` installed, and if so, it will forward all your requests to that
+version, otherwise it will use the globally installed version of `pjc`. (This is a minor details,
+not worth remembering).
+
+
+
+As mentioned, there are a few builtin commands which take precedence over the commands you
 supply after `pjc`.
 
 |Built-in Command| Action                                                                     |
@@ -108,10 +141,14 @@ commands can see, and that your dependers can see.
 `package.json` field called `buildTimeOnlyDependencies`.
 
 2. Enjoy some benefits of `pjc`.
-`pjc` sets the `OCAMLFIND_CONF` environment variable to
-point to an *automatically* generated `findlib.conf`. This makes it so popular
+`pjc` automatically sets up locations and configuration for natively compiled
+libraries. The first tool support for is `ocamlfind`, and the same techniques
+should apply to `pkg-config` (which is like `ocamlfind` for C programs). Accordingly,
+we also automatically set some important environment variables to work with those
+native library managers (such as the `OCAMLFIND_CONF` environment variable, which will
+be set to an automatically constructed`findlib.conf` file). This makes it so popular
 build tooling (`ocamlbuild/rebuild`, `ocamlfind`) can "see" your built `npm`
-dependencies that install `findlib` packages. `pjc` also
+dependencies that generate `ocamlfind` compatible packages. `pjc` also
 sets up a bunch of other helpful environment variables that your build scripts
 can use.
 
@@ -130,34 +167,48 @@ visible to your dependers via `findlib`, your build system should generate a
 `my_package__install` (`ocamlfind install -destdir $my_package__install
 $my_package__name META`).
 
-#### `findlib`/`ocamlfind`.
+#### More details about `ocamlfind`.
 
-`findlib`/`ocamlfind` are existing technologies that at first seems totally redundant with
-`package.json` but serve a different purpose. `findlib` lets you declare `libraries` and
-group them into `findlib packages` (which are different than `npm` packages).
+`ocamlfind` is an existing technology that at first seems totally redundant with
+`package.json` but serves a different purpose. `ocamlfind` lets you declare `ocamlfind libraries` and
+group them into `ocamlfind packages`. Whereas `package.json` packages group together source code
+resources under a logical name, `ocamlfind` groups together compiled artifacts for those resources
+into a logical name (the `ocamlfind` package).
+Usually for every `package.json` package, you'd have one `ocamlfind` library
+(which may also contain "sub-libraries", but you can ignore that for now).
 
-In short, these `findlib` packages tracks which flags must be passed to a compiler,
-and a linker, in a way that makes it much easier on your build scripts.  It
-allows you to basically "name" a set of build artifacts into "libraries" and then
-group those into "packages" (again, different concept than `npm` pacakge),
-and then allow other `npm` pacakges to refer to that `findlib` package by name.
-Instead of having to pass all the flags to a compiler/linker for every artifact,
-`findlib`/`ocamlfind` allow you to just pass `-pkg myPackageName`.
+In addition to grouping together the artifacts under a logical name, these `ocamlfind`
+packages track which flags must be passed to the final linking stage of the compiler,
+in a way that makes it much easier on everyone's build scripts. The end result is that
+if your `package.json` package can generate an `ocamlfind` library, then other `package.json`
+projects can easily compile against it. Otherwise, when other packages depend on your package,
+they'd be scratching their heads wondering where your build artifacts are located, and
+what flags they need to pass to the compiler when compiling against them. I mean,
+you can take that approach if you really want to, but why not just
+make an `ocamlfind` package instead?
+Specifically, when another package depends on my `package.json` package named `myPackageName`,
+and when my `package.json` package generates an `ocamlfind` package called `myPackageNameOcamlFind`,
+then `findlib`/`ocamlfind` allows the package that depends on my package to just pass `-pkg myPackageNameOcamlFind`.
+
 The file that records which artifacts are grouped into `myPackageName`, is
-the `META` file.
-Each `npm` package is expected to generate their own `findlib`
-library *if it even wants to*. We'll supply an environment variable that helps
-build scripts for each `npm` package know where to install their `findlib`
-"package".
+the `META` file. By generating the `META` file, you've just created a valid `ocamlfind` package.
+Now, `pjc` makes it so you will automatically see all those `META` files for your dependencies.
+`pjc` supplies an environment variable that helps
+build scripts for each `package.json` package know where to install their `findlib`
+"package" into, and also populates another environment variable that helps your
+`package.json` build script *see* all your package's `ocamlfind` dependencies.
+
 It's super annoying to write the `META` file, so if you're making a new build
 system that works well with `PackageJsonForCompilers`, you should just have your
-build system just generate it and put it into the `my_package__install` directory
-which will be initialized by `PackageJsonForCompilers`.
+build system just generate it. More details on that later.
 
-Why do we need convenient hooks for adding a bunch of artifacts to
-compilers/linkers? Because every `npm` pacakge uses its own build system, and
-this is a way to allow all `npm` packages that use the same compiler
-to share a convention for interop regardless of their build system.
+Why do we need this? Again, the answer is because it's too difficult for packages to
+promise to put their artifacts into predictable locations, so we suggest that they
+generate `ocamlfind` packages which say *exactly* where those artifacts are.
+
+#### More details about `pkg-config`.
+
+`pkg-config` is like `ocamlfind`, but for C programs.
 
 ## Details
 
@@ -766,7 +817,8 @@ the build scripts.
 - How we know which architecture to specify when building a package (based on
   `buildTimeOnlyDependency`, the host architecture, and "target" architecture).
 - How we know how many times to build a package - how many architectures.
-
+- External dependencies.
+- How environment variables propagate and are "scoped".
 
 
 
