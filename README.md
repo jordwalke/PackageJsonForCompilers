@@ -857,4 +857,18 @@ to any package that transitively depends on the package that publishes the globa
 However, with `buildTimeOnlyDependencies`, things get more
 complicated because we will end up with multiple versions of packages simultaneously and
 they will all be trying to set the same globals that are propagated. What convention should be used?
+The reference implementation of `pjc` called [`esy`](https://github.com/jordwalke/esy) simplifies
+the visibility of environment variables by having a field called `scope`, instead of `global: true/false`.
+
+- The global "scope" of an environment variable causes that variable to be seen by packages that
+depend on it transitively. It means your package may be able to see variables defined very
+deep into its dependency graph. But what about the opposite? What if, while building our packages,
+we want our deep dependencies to see variables that *we* specify? That sounds very bad in general,
+and it is, but there's some important use cases where we actually want this. For example, at the
+top level app, we may want to set a variable that causes the compiler to compile with debug symbols (`-g`).
+Even `dependency-env` doesn't solve this right now. Perhaps we want a few values for `scope` such as
+`scope:bubble`, `scope:capture` which control which direction environment variables propagate. Right now
+we only have the ability to propagate "upwards" from dependencies to dependers (either one level or unlimited
+levels "global"). We would want the other direction as well - "downward" propagation (perhaps either one
+level or unlimited so that it mirros the "upward" propagation).
 
