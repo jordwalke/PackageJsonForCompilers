@@ -409,7 +409,7 @@ artifacts, and keeps it symlink friendly / caching friendly.
 
 |Environment Var | Meaning                                                                     | Equivalent To             |
 |----------------|---------------------------------------------------------------------------- |---------------------------|
-| `FINDLIB_CONF` | Path to precomputed findlib.conf file in `cur_target_dir`, exposing `cur`'s dependencies|              |
+| `OCAMLFIND_CONF` | Path to precomputed findlib.conf file in `cur_target_dir`, exposing `cur`'s dependencies|              |
 | `sandbox`      | Path to top level package being installed - the thing you git cloned        |                           |
 | `_install_tree`| Path to sandbox install tree, which contains all prefixes, for all packages |                           |
 | `_build_tree`  | Path to sandbox build tree, contains all build directories, for all packages|                           |
