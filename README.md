@@ -410,9 +410,9 @@ artifacts, and keeps it symlink friendly / caching friendly.
 |Environment Var | Meaning                                                                     | Equivalent To             |
 |----------------|---------------------------------------------------------------------------- |---------------------------|
 | `OCAMLFIND_CONF` | Path to precomputed findlib.conf file in `cur__target_dir`, exposing `cur`'s dependencies|              |
-| `sandbox`      | Path to top level package being installed - the thing you git cloned        |                           |
-| `_install_tree`| Path to sandbox install tree, which contains all prefixes, for all packages |                           |
-| `_build_tree`  | Path to sandbox build tree, contains all build directories, for all packages|                           |
+| `pjc_sandbox`      | Path to top level package being installed - the thing you git cloned        |                           |
+| `pjc_install_tree`| Path to sandbox install tree, which contains all prefixes, for all packages |                           |
+| `pjc_build_tree`  | Path to sandbox build tree, contains all build directories, for all packages|                           |
 |`my_package__name`    | Normalized name of the `my-package` (`my_package`) | OPAM's `PKG:name` but not transitive    | No          |
 |`my_package__version` | Version of the `my-package`                 | OPAM's `PKG:version` but not transitive | No          |
 |`my_package__root`    | Path to root of source tree for `my-package`| Opam's `lib`                |
