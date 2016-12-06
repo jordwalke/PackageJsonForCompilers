@@ -813,6 +813,16 @@ clean the prior build. If packages respect the artifact/install locations,
 it's as easy as removing those directories and recreating them before running
 the build scripts.
 
+### Parallelism
+
+The implementation of `PackageJsonForCompilers` will output a makefile or shell
+script that builds the minimal set of packages optimally after any
+install/change/update. It will build the packages in parallel, but some package
+build scripts might reach outside of their build artifacts destination into
+other shared locations, and doing so is unsafe. Therefore `PackageJsonForCompilers`
+specifices that a `package.json` can have a field `pjc.unsafeBuild` which
+will ensure that this package build has an exclusive lock on the build process
+and releases that lock upon completion/failure.
 
 ### Not Shown In This Spec
 
