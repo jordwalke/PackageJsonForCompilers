@@ -835,6 +835,10 @@ and releases that lock upon completion/failure.
 - External dependencies.
 - How environment variables propagate and are "scoped".
 
+### Various Requested Features
+- Every time you run `esy build`, it should also dump a key/value of environment variables
+  to `./.env` at the root of the project being built. This makes it easy for tooling
+  to source that file when it discovers it.
 
 
 ## Wait, `npm`? What's going On In the Install Process
