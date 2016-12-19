@@ -636,7 +636,7 @@ refer to the host architecture. Here's what that would look like for
 It is not immediately obvious how many architectures a package at a specific version
 needs to be compiled for.
 We get into some interesting scenarios when looking at how package manager
-resolution combines with `buildTimeOnlyDependencies`, `TARGET_ARCHITECTURE`.
+resolution combines with `buildTimeOnlyDependencies`, `pjc__target_architecture`.
 
 Consider the following scenario. The package manager (or `shrinkwrap` etc) has
 resolved `PackageC` to a single version, though multiple packages depend on it.
@@ -645,7 +645,7 @@ There is one location for `PackageC`'s source code (likely in
 everything is simple.
 
 
-If `TARGET_ARCHITECTURE` is empty, (defaulted to host), then no matter what,
+If `pjc__target_architecture` is empty, (defaulted to host), then no matter what,
 `pjc` will build everything according to the simplest
 convention.
 
@@ -688,7 +688,7 @@ because no matter what, everything needs to run on the host architecture (build
 time or not!) and since there's only one `PackageC` source, we only need to
 build it at most once.
 
-If `TARGET_ARCHITECTURE` is `arm64` (different than host), and *nothing* is
+If `pjc__target_architecture` is `arm64` (different than host), and *nothing* is
 marked in `buildTimeOnlyDependencies`, then everything must be clearly be
 compiled for `arm64`, and no dependencies need to execute on the host for
 building.
@@ -717,7 +717,7 @@ building.
     └──────────────┘
 
 
-Now, consider if `TARGET_ARCHITECTURE` is `arm64` (different than host), and
+Now, consider if `pjc__target_architecture` is `arm64` (different than host), and
 *only the dependency from `PackageA` to `PackageC`* is marked in
 `buildTimeOnlyDependencies`. There's still *one* version of `PackageC`
 resolved, but it changes the number of times `pjc` will
@@ -746,7 +746,7 @@ even though there's only one *version* of `PackageC`'s source resolved on disk.
         │          │         │   ├── ...             ┊
         │          │         │   └── node_modules/   ┊
         │          │         │       ├── PackageC    ┊ Everything else, is compiled for the
-        │          │         │       │   └── ...     ┊ TARGET_ARCHITECTURE. Including C!
+        │          │         │       │   └── ...     ┊ pjc__target_architecture. Including C!
       ╭─▼──────────▼─╮       │       └── PackageB    ┊ It is still needed at runtime
       │PackageC-1.0.0│       │           └── ...     ┊ even though it was also needed at
       └──────────────┘       ├── _build_arm64/       ┊ build time.
@@ -765,11 +765,11 @@ So `pjc`'s directory layout is flexible enough to support
 compiling of multiple versions of a *single* package, in their isolated
 quarantined areas, but this last example shows that it's also flexible enough
 to support a *single* version of a package compiled *multiple times* in the
-case of a different `TARGET_ARCHITECTURE`.
+case of a different `pjc__target_architecture`.
 
 
 Quickly consider if `PackageB` where listed in `buildTimeOnlyDependencies` of
-`PackageA`, while `TARGET_ARCHITECTURE` was `arm64` as before.
+`PackageA`, while `pjc__target_architecture` was `arm64` as before.
 
       ╭─────────╮
       │PackageA │
@@ -791,13 +791,13 @@ Quickly consider if `PackageB` where listed in `buildTimeOnlyDependencies` of
       │PackageC-1.0.0│
       └──────────────┘
 
-- `PackageA` must be compiled for the `TARGET_ARCHITECTURE`.
-- `PackageC` must be compiled for the `TARGET_ARCHITECTURE` because it's needed by `PackageA` at runtime.
+- `PackageA` must be compiled for the `pjc__target_architecture`.
+- `PackageC` must be compiled for the `pjc__target_architecture` because it's needed by `PackageA` at runtime.
 - `PackageB` must be compiled for the host.
 - `PackageC` must be compiled for the host as well! Even though `PackageC` is a
   *runtime* dependency of `PackageB`! When `PackageB` acts as a
   `buildTimeOnlyDependency`, `PackageB`'s "runtime", is not the
-  `TARGET_ARCHITECTURE` - it is the *host* architecture.
+  `pjc__target_architecture` - it is the *host* architecture.
 
 
 `pjc` handles all of these cases and provides physical space for all of these
@@ -916,4 +916,5 @@ Even `dependency-env` doesn't solve this right now. Perhaps we want a few values
 we only have the ability to propagate "upwards" from dependencies to dependers (either one level or unlimited
 levels "global"). We would want the other direction as well - "downward" propagation (perhaps either one
 level or unlimited so that it mirros the "upward" propagation).
+
 
