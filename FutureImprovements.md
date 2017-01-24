@@ -120,8 +120,77 @@ In this example, we use the OCaml multicore compiler in the sandbox:
 {
   _sandbox: {
     env: env,
-    dependencies: dependencies {
+    dependencies: {
       ocaml: "ocaml/ocaml-multicore"
+    }
+  }
+}
+```
+
+We may decide to require that you specify a dependency on the specific
+package that you override *to*, so that the package manager will make
+its source available.
+
+###### Cross Compilation and Sandbox Config
+Ideally, `esy` is smart enough to know when it needs to recompile
+a package for a different architecture than the host architecture by
+looking at `buildTimeOnlyDependencies` (as opposed to using existing
+artifacts in the cache for the wrong architecture). It's not clear what
+exactly it should do to inform the compiler which architecture it is building for.
+Perhaps creating or using an established convention of setting an environment
+variable such as `pjc_architecture`, and then expecting compilers to be able to
+take it into account is the best approach. If that works, then existing packages
+don't need any modification to their build scripts - they don't need to be modified
+to pass `--arch` to the compiler. Instead, we only need to create one modification
+to the compiler itself to examine the `pjc_architecture`/`ARCH` env var.
+
+Hopefully, that will eliminate the majority of the need to fork packages in order to
+make them compatible with building for another architecture. However, that won't always
+be sufficient. Some packages (hopefully very rarely) will need some change to their
+build command (in `package.json`/`opam` file) in order to correctly compile for
+some target architecture. If that's the case then a fork/patch is the only viable
+options and we need to provide a way to use that fork - but *only* in the right
+circumstances. You might think that we could use the sandbox config to override
+some dependencies to use the forked package compatible with the target architecture.
+
+
+
+```js
+// This does not work!
+{
+  _sandbox_ios: {
+    env: {
+      pjc_architecture: 'armv7'
+    },
+    dependencies: {
+      myPackage: "iOSForkOfMyPackage"
+    }
+  }
+}
+```
+
+This is not sufficient because it might be the case that we depend on
+`myPackage` as a `buildTimeOnlyDependencies`, as well as a runtime dependency.
+We are building on an `x86`, but the final artifacts target `armv7`. (Suppose
+`pjc_architecture` is how we specify the final *runtime* architecture).
+
+So we may need to extend this named sandbox config feature to allow overriding
+packages based on whether or not that package is being built *as* a build time
+dependency vs. runtime one.
+
+```javascript
+// This does not work!
+{
+  _sandbox_ios: {
+    env: {
+      pjc_architecture: 'armv7'
+    },
+    runtime: {
+      dependencies: {
+        myPackage: "iOSForkOfMyPackage"
+      }
+    },
+    buildTime: {
     }
   }
 }
