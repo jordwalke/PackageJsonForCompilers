@@ -195,3 +195,21 @@ dependency vs. runtime one.
   }
 }
 ```
+
+## Runtime Environment Variables
+
+So far we've made the distinction between runtime and buildTime dependencies.
+But so far, *all* environment variables have pertained to building of artifacts.
+PJC includes a command `pjc cmd` which will run the `cmd` within something
+resembling the environment that you *build* the `cwd`'s project within. But what
+if the artifacts that are produced expect to have certain environment variables
+set when their executables are ran. Those environment variables needn't be
+related to the ones that are set when *building* those artifacts. We should likely
+create a convention/config for setting up environment variables when *running*
+resulting executables, and allow exporting / ejecting binaries embedded in a
+boot script that sets those environment variables. It's possible that many/most
+of the propagation concepts (global / exclusive / etc) still apply to *runtime*
+environment variables, so perhaps in addition to `esy.exportedEnv`, we should also
+support `esy.exportedRuntimeEnv`. This is especially important when building systems
+that can dynamically link libraries and where those libraries' paths are configured
+via environment variables.
